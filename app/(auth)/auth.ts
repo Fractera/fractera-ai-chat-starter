@@ -5,6 +5,7 @@ import Credentials from "next-auth/providers/credentials";
 import { DUMMY_PASSWORD } from "@/lib/constants";
 import { createGuestUser, getUser } from "@/lib/db/queries";
 import { authConfig } from "./auth.config";
+import { chatUserIdFor, fracteraSession } from "@/lib/fractera/session";
 
 export type UserType = "guest" | "regular";
 
@@ -32,7 +33,7 @@ declare module "next-auth/jwt" {
 
 export const {
   handlers: { GET, POST },
-  auth,
+  auth: nextAuth,
   signIn,
   signOut,
 } = NextAuth({
@@ -97,3 +98,30 @@ export const {
     }),
   ],
 });
+
+
+
+// ── ЕДИНАЯ ТОЧКА ВХОДА (наша правка поверх шаблона, шаг 96) ──────────────────
+//
+// 🔒 auth() ТЕПЕРЬ СПРАШИВАЕТ НАШУ СЛУЖБУ ВХОДА, А НЕ СВОЙ NextAuth. Все места
+// шаблона зовут auth() и ждут session.user.{id,email,type} — поэтому подменена
+// именно эта функция, а не переписаны десятки её вызовов: обновление сверху
+// трогает вызовы, а не подмену.
+//
+// 🔒 РОДНОЙ NextAuth ОСТАВЛЕН ЖИТЬ (nextAuth, handlers): его маршруты
+// /api/auth/* продолжают отвечать. Снос чужого механизма ради своего — та самая
+// правка, которая ссорится с каждым обновлением сверху.
+//
+// 🛑 ГОСТЕВОГО ВХОДА БОЛЬШЕ НЕТ ПО СМЫСЛУ: не вошедший человек сессии не
+// получает вовсе — его уводит к службе входа proxy.ts.
+export async function auth(): Promise<{
+  user: { id: string; email: string; name?: string | null; type: UserType };
+} | null> {
+  const s = await fracteraSession();
+  if (!s) return null;
+
+  const id = await chatUserIdFor(s.email);
+  return { user: { id, email: s.email, name: s.email, type: "regular" } };
+}
+
+export { nextAuth };

@@ -1,0 +1,80 @@
+import { cookies } from "next/headers";
+import { createUser, getUser } from "@/lib/db/queries";
+import { generateUUID } from "@/lib/utils";
+
+// ЕДИНАЯ ТОЧКА ВХОДА — СЛУЖБА `:3001`, И ЧАТ К НЕЙ ПЕРЕАДРЕСУЕТ (шаг 96).
+//
+// 🔒 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА ДОСЛОВНО: «если вошли в проект как архитектор, то все
+// сервисы видят нас как архитектор… где бы ни вошли — хоть админпанель, хоть
+// сайт, хоть чат. Всё делаю переадресацию к единственной точке входа».
+//
+// 🔒 КОНВЕЙЕР ПОВТОРЁН БАЙТ В БАЙТ, А НЕ ПРИДУМАН ЗАНОВО. Гостевое приложение
+// читает сессию ровно так: пересылает куку запроса в `${AUTH_SERVICE_URL}/api/session`
+// и получает `{ userId, email, roles }`. Здесь то же самое, и это не лень —
+// закон проекта: доказанный конвейер входа не улучшают.
+//
+// 🔒 ПОЧЕМУ КУКА ВООБЩЕ ВИДНА ЧАТУ — ИЗМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО: служба входа
+// ставит её на `COOKIE_DOMAIN=.aifa.dev`, то есть на весь домен второго уровня.
+// Поэтому `chat.aifa.dev` получает её сам, без общего секрета между службами.
+//
+// 🛑 СВОЕГО ВХОДА У ЧАТА НЕТ И НЕ БУДЕТ. Гостевой вход шаблона (`/api/auth/guest`)
+// заводил бы вторую правду о человеке: чат знал бы своих, проект — своих.
+
+export type FracteraSession = {
+  userId: string;
+  email: string;
+  roles: string[];
+};
+
+function authUrl(): string {
+  return (
+    process.env.AUTH_SERVICE_URL ||
+    process.env.NEXT_PUBLIC_AUTH_URL ||
+    "http://localhost:3001"
+  );
+}
+
+/** Кто вошёл, по мнению единственной службы входа. `null` — никто. */
+export async function fracteraSession(): Promise<FracteraSession | null> {
+  const jar = await cookies();
+  const cookie = jar
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+  if (!cookie) return null;
+
+  try {
+    const res = await fetch(`${authUrl()}/api/session`, {
+      headers: { cookie },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const s = (await res.json()) as Partial<FracteraSession>;
+    return s?.email ? { userId: s.userId ?? s.email, email: s.email, roles: s.roles ?? [] } : null;
+  } catch {
+    // Служба входа может не отвечать — тогда человек не узнан, и это честный
+    // исход: пускать «на всякий случай» нельзя, а падать незачем.
+    return null;
+  }
+}
+
+/**
+ * Строка чата для вошедшего человека.
+ *
+ * 🔒 ИДЕНТИЧНОСТЬ ПРИНАДЛЕЖИТ СЛУЖБЕ ВХОДА, А СТРОКА В БАЗЕ ЧАТА — ЭТО ВСЕГО
+ * ЛИШЬ ВНЕШНИЙ КЛЮЧ. У разговоров и документов чата есть ссылка на `User`, и
+ * без строки они не сохранятся; поэтому строка заводится по ПОЧТЕ — тому
+ * единственному, что обе стороны знают одинаково.
+ *
+ * 🛑 ПАРОЛЬ В ЭТОЙ СТРОКЕ СЛУЧАЙНЫЙ И НИКОМУ НЕ ИЗВЕСТЕН — им нельзя войти.
+ * Вход идёт только через службу; поле заполнено потому, что его требует схема
+ * шаблона, а не потому, что мы завели второй способ входа.
+ */
+export async function chatUserIdFor(email: string): Promise<string> {
+  const found = await getUser(email);
+  if (found.length > 0) return found[0].id;
+
+  await createUser(email, generateUUID());
+  const created = await getUser(email);
+  return created[0].id;
+}
