@@ -49,20 +49,22 @@ const THEME_COLOR_SCRIPT = `\
   updateThemeColor();
 })();`;
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // 🔒 ЯЗЫК СТРАНИЦЫ РЕШАЕТ СЕРВЕР И ЗАПИСЫВАЕТ ЕГО В РАЗМЕТКУ (шаг 96):
-  // островки читают `<html lang>`, а не `navigator.language`. Второй источник
-  // языка разошёлся бы с первым на первой же настройке.
-  const lang = await chatLang();
-
+  // 🛑 ЯЗЫК ЗДЕСЬ НЕ РЕШАЕТСЯ, И ЭТО ИЗМЕРЕНО СБОРКОЙ, А НЕ ВЫБРАНО. Я поставил
+  // сюда чтение `accept-language` — сборка отказала: у шаблона включён
+  // `cacheComponents`, и любое обращение к заголовкам в корневой раскладке
+  // делает динамическими ВСЕ страницы («Uncached data was accessed outside of
+  // <Suspense>»). Язык выбирает островок по языку браузера; появится настройка
+  // языка у человека — она станет единственным источником, и это будет одна
+  // правка в `use-ui-lang`.
   return (
     <html
       className={`${geist.variable} ${geistMono.variable}`}
-      lang={lang}
+      lang="en"
       suppressHydrationWarning
     >
       <head>
