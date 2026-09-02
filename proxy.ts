@@ -13,13 +13,16 @@ import { type NextRequest, NextResponse } from "next/server";
 //
 // 🔒 КУКА ВИДНА ЧАТУ, И ЭТО ИЗМЕРЕНО: служба входа ставит её на
 // `COOKIE_DOMAIN=.aifa.dev`, то есть на весь домен второго уровня.
+//
+// 🛑 АДРЕСА СОБИРАЮТСЯ ИЗ ЗАГОЛОВКОВ NGINX, А НЕ ИЗ `request.url`. ✗ оплачено
+// трижды за день: за прокси внутренний адрес выглядит как `localhost:3600`, и
+// любая построенная из него ссылка ведёт в никуда с чужой машины.
 
-function authBase(): string {
-  return (
-    process.env.NEXT_PUBLIC_AUTH_URL ||
-    process.env.AUTH_SERVICE_URL ||
-    "http://localhost:3001"
-  );
+function publicOrigin(request: NextRequest): string {
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : new URL(request.url).origin;
 }
 
 export async function proxy(request: NextRequest) {
@@ -35,13 +38,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 🔒 СТРАНИЦА-ЗАГЛУШКА ЖИВЁТ БЕЗ СЕССИИ — иначе она отправляла бы к входу
+  // того, кто на неё же и вернулся после выхода, и человек ходил бы по кругу.
+  if (pathname === "/welcome") {
+    return NextResponse.next();
+  }
+
   const cookie = request.headers.get("cookie") ?? "";
   let signedIn = false;
   if (cookie) {
     try {
-      const res = await fetch(`${authBase()}/api/session`, {
-        headers: { cookie },
+      const authService =
+        process.env.AUTH_SERVICE_URL ||
+        process.env.NEXT_PUBLIC_AUTH_URL ||
+        "http://localhost:3001";
+      const res = await fetch(`${authService}/api/session`, {
         cache: "no-store",
+        headers: { cookie },
       });
       signedIn = res.ok && Boolean(((await res.json()) as { email?: string })?.email);
     } catch {
@@ -53,30 +66,20 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!signedIn) {
-    // 🔒 ФОРМА ССЫЛКИ — СТАНДАРТ ПАНЕЛИ (:3002), А НЕ САЙТА. Проверено в её
-    // раскладке: `${authUrl}/login?redirectUrl=<адрес>` для входа и
-    // `${authUrl}/logout?redirectUrl=<адрес>` для выхода. Сайт зовёт `/register`
-    // с `callbackUrl` — это его случай (регистрация с требованием роли), и
-    // повторять его здесь значило бы завести второй стандарт.
-    // 🛑 АДРЕС ВОЗВРАТА СОБИРАЕТСЯ ИЗ ЗАГОЛОВКОВ, А НЕ ИЗ request.url. ✗ измерено:
-    // за nginx внутренний адрес выглядит как https://localhost:3600/, и человек
-    // после входа возвращался бы в никуда. Прокси видит настоящее имя только в
-    // x-forwarded-host / x-forwarded-proto, которые ставит nginx.
-    const host =
-      request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
-    const proto = request.headers.get("x-forwarded-proto") ?? "https";
-    const back = host
-      ? `${proto}://${host}${request.nextUrl.pathname}${request.nextUrl.search}`
-      : new URL(request.url).toString();
-    return NextResponse.redirect(
-      `${authBase()}/login?redirectUrl=${encodeURIComponent(back)}`,
-    );
+    // 🔒 СНАЧАЛА ЗАГЛУШКА, ПОТОМ ВХОД (правка владельца 2026-09-02). Прямая
+    // переадресация к службе выглядела как поломка: человек нажимал «выйти» и
+    // немедленно оказывался на чужой форме входа, не поняв, что вышел. Заглушка
+    // объясняет, где он и что делать, и уводит дальше по нажатию.
+    //
+    // 🔒 СТАНДАРТ ССЫЛКИ ВЫХОДА ПРИ ЭТОМ НЕ ТРОНУТ: он общий с панелью, и второй
+    // стандарт ради одного случая — это ровно то, чего мы избегаем.
+    return NextResponse.redirect(`${publicOrigin(request)}/welcome`);
   }
 
-  // Вошедшему незачем видеть формы входа шаблона: единственная точка входа —
-  // служба, и её страницы живут по другому адресу.
-  if (["/login", "/register"].includes(pathname)) {
-    return NextResponse.redirect(new URL("/", request.url));
+  // Вошедшему незачем видеть формы входа шаблона и заглушку: единственная точка
+  // входа — служба, и её страницы живут по другому адресу.
+  if (["/login", "/register", "/welcome"].includes(pathname)) {
+    return NextResponse.redirect(`${publicOrigin(request)}/`);
   }
 
   return NextResponse.next();
@@ -89,6 +92,7 @@ export const config = {
     "/api/:path*",
     "/login",
     "/register",
+    "/welcome",
 
     "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
   ],

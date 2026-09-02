@@ -39,9 +39,19 @@ async function SidebarShell({ children }: { children: React.ReactNode }) {
   // `https://localhost:3001/…`, то есть ссылка в никуда с чужой машины.
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? "https";
-  const authUrl = process.env.AUTH_SERVICE_URL ?? process.env.NEXT_PUBLIC_AUTH_URL ?? "";
+
+  // 🛑 ССЫЛКА ДЛЯ БРАУЗЕРА БЕРЁТ ПУБЛИЧНЫЙ АДРЕС СЛУЖБЫ, А НЕ ВНУТРЕННИЙ.
+  // ✗ оплачено дважды за час: `AUTH_SERVICE_URL` у нас `http://localhost:3001`
+  // — он верен для запроса сервер-серверу и бессмыслен в адресной строке
+  // человека. Публичный адрес идёт ПЕРВЫМ, внутренний остаётся запасным.
+  const authUrl = process.env.NEXT_PUBLIC_AUTH_URL || process.env.AUTH_SERVICE_URL || "";
+
+  // 🔒 ВОЗВРАТ ПОСЛЕ ВЫХОДА — СЮДА ЖЕ, ПО СТАНДАРТУ ПАНЕЛИ. Вышедшего встречает
+  // страница-заглушка `/welcome`: она существует без авторизации, и поэтому
+  // менять стандарт ссылки не понадобилось.
   const back = host ? encodeURIComponent(`${proto}://${host}/`) : "";
   const signOutHref = authUrl && back ? `${authUrl}/logout?redirectUrl=${back}` : "";
+
   const isCollapsed = cookieStore.get("sidebar_state")?.value !== "true";
 
   return (
