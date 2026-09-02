@@ -95,3 +95,70 @@ export async function fetchMedia(id: string): Promise<Response | null> {
     return null;
   }
 }
+
+/**
+ * Превратить вложения медиатеки в то, что модель действительно может прочесть.
+ *
+ * 🔒 МОДЕЛЬ НЕ ХОДИТ ПО НАШИМ АДРЕСАМ, И ЭТО НЕ НАСТРОЙКА, А УСТРОЙСТВО.
+ * Адрес `/api/fractera/media/<id>` относительный и стоит под замком роли: для
+ * OpenAI он не существует — ни открыть, ни авторизоваться. Поэтому картинка
+ * уезжает СОДЕРЖИМЫМ (`data:`), а не ссылкой.
+ *
+ * 🔒 НЕ-КАРТИНКА СТАНОВИТСЯ СТРОКОЙ, А НЕ ИСЧЕЗАЕТ. Звук, видео и документ
+ * модель этой линейки как файл не принимает; молча выбросить их значило бы
+ * сказать ей неправду о разговоре — человек файл приложил. Голос при этом уже
+ * приезжает расшифровкой в тексте, так что смысл не теряется.
+ */
+export async function inlineAttachmentsForModel<
+  T extends { parts?: unknown[] },
+>(messages: T[]): Promise<T[]> {
+  return await Promise.all(
+    messages.map(async (message) => {
+      if (!Array.isArray(message.parts)) {
+        return message;
+      }
+
+      const parts = await Promise.all(
+        message.parts.map(async (part) => {
+          const p = part as {
+            type?: string;
+            url?: string;
+            mediaType?: string;
+            name?: string;
+          };
+          if (p?.type !== "file" || typeof p.url !== "string") {
+            return part;
+          }
+          if (!p.url.startsWith("/api/fractera/media/")) {
+            return part;
+          }
+
+          const id = p.url.slice("/api/fractera/media/".length);
+          const kind = (p.mediaType ?? "").split("/")[0];
+
+          if (kind !== "image") {
+            return {
+              text: `[вложение: ${p.name ?? "файл"}, ${p.mediaType ?? "неизвестный род"}]`,
+              type: "text",
+            };
+          }
+
+          const res = await fetchMedia(id);
+          if (!res) {
+            return {
+              text: `[вложение недоступно: ${p.name ?? id}]`,
+              type: "text",
+            };
+          }
+          const buf = Buffer.from(await res.arrayBuffer());
+          return {
+            ...p,
+            url: `data:${p.mediaType ?? "image/png"};base64,${buf.toString("base64")}`,
+          };
+        }),
+      );
+
+      return { ...message, parts };
+    }),
+  );
+}

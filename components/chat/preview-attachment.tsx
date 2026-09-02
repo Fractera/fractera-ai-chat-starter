@@ -33,11 +33,18 @@ export const PreviewAttachment = ({
       data-testid="input-attachment-preview"
     >
       {kind === "image" ? (
+        // 🔒 БЕЗ ОПТИМИЗАТОРА, И ЭТО НЕ ЛЕНЬ, А УСТРОЙСТВО. `next/image`
+        // грузит файл ВТОРЫМ запросом с сервера — без куки человека. Наш
+        // маршрут медиатеки стоит под тем же замком, что разговор, и такому
+        // запросу отвечает переадресацией на вход; оптимизатор получает не
+        // картинку и отдаёт 400. Измерено 2026-09-02: файл по своему адресу —
+        // 200 image/png, он же через `/_next/image` — 400.
         <Image
           alt={name ?? "attachment"}
           className="size-full object-cover"
           height={96}
           src={url}
+          unoptimized
           width={96}
         />
       ) : kind === "audio" ? (

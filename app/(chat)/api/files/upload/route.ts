@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { auth } from "@/app/(auth)/auth";
 import { fracteraRoles } from "@/lib/fractera/session";
+import { ALLOWED_MEDIA_TYPES } from "@/lib/fractera/attachments";
 import { uploadToMedia } from "@/lib/fractera/media";
 
 // ВЛОЖЕНИЯ ЕДУТ В МЕДИАТЕКУ ПРОЕКТА, А НЕ В VERCEL BLOB (шаг 96).
@@ -22,29 +23,8 @@ import { uploadToMedia } from "@/lib/fractera/media";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
-const ALLOWED = [
-  // изображения
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  // звук: сюда попадает и голосовая запись из браузера
-  "audio/webm",
-  "audio/mpeg",
-  "audio/mp4",
-  "audio/wav",
-  "audio/ogg",
-  // видео
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  // документы
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-  "text/csv",
-  "application/json",
-];
+// 🔒 СПИСОК РОДОВ — ОБЩИЙ С ДВЕРЬЮ ОТПРАВКИ СООБЩЕНИЯ (`lib/fractera/attachments`).
+const ALLOWED: readonly string[] = ALLOWED_MEDIA_TYPES;
 
 const FileSchema = z.object({
   file: z

@@ -12,6 +12,7 @@ import { checkBotId } from "botid/server";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { fracteraRoles } from "@/lib/fractera/session";
+import { inlineAttachmentsForModel } from "@/lib/fractera/media";
 import { chatUiOf } from "@/lib/fractera/i18n";
 import { auth, type UserType } from "@/app/(auth)/auth";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
@@ -218,7 +219,11 @@ export async function POST(request: Request) {
     const isReasoningModel = capabilities?.reasoning === true;
     const supportsTools = capabilities?.tools === true;
 
-    const modelMessages = await convertToModelMessages(uiMessages);
+    // 🔒 ВЛОЖЕНИЕ УЕЗЖАЕТ МОДЕЛИ СОДЕРЖИМЫМ, А НЕ ССЫЛКОЙ: наш адрес медиатеки
+    // относительный и стоит под замком роли — снаружи его не открыть.
+    const modelMessages = await convertToModelMessages(
+      await inlineAttachmentsForModel(uiMessages),
+    );
 
     const stream = createUIMessageStream({
       execute: async ({ writer: dataStream }) => {
