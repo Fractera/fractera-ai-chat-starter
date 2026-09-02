@@ -56,6 +56,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { PaperclipIcon, StopIcon } from "./icons";
 import { PreviewAttachment } from "./preview-attachment";
+import { VoiceButton } from "@/components/fractera/voice-button";
 import {
   type SlashCommand,
   SlashCommandMenu,
@@ -142,6 +143,15 @@ function PureMultimodalInput({
   }, [input, setLocalStorageInput]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Расшифровка дописывается к тому, что человек уже набрал: она дополняет
+  // мысль, а не стирает её.
+  const handleVoiceText = useCallback(
+    (text: string) => {
+      setInput((prev) => (prev ? `${prev} ${text}` : text));
+    },
+    [setInput]
+  );
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
@@ -296,6 +306,19 @@ function PureMultimodalInput({
       toast.error("Failed to upload file, please try again!");
     }
   }, []);
+
+  // 🔒 ЗАПИСЬ ГОЛОСА ЕДЕТ ТЕМ ЖЕ ПУТЁМ, ЧТО И ЛЮБОЙ ФАЙЛ СО СКРЕПКИ: одна
+  // дорога в медиатеку, один вид в ленте. Второй путь для звука означал бы, что
+  // голос однажды перестанет открываться там, где открываются картинки.
+  const handleVoiceFile = useCallback(
+    async (file: File) => {
+      const uploaded = await uploadFile(file);
+      if (uploaded) {
+        setAttachments((prev) => [...prev, uploaded]);
+      }
+    },
+    [setAttachments, uploadFile]
+  );
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -481,7 +504,12 @@ function PureMultimodalInput({
           />
         )}
 
+      {/* 🔒 ЧЕТЫРЕ РОДА ВЛОЖЕНИЙ, А НЕ ОДИН (правка владельца 2026-09-02):
+          картинка, звук, видео, документ. Перечень тот же, что принимает дверь
+          загрузки: второй список разошёлся бы с ней молча, и человек выбирал бы
+          файл, который сервер потом отвергает. */}
       <input
+        accept="image/*,audio/*,video/*,application/pdf,text/plain,text/markdown,text/csv,application/json"
         className="pointer-events-none fixed -top-4 -left-4 size-0.5 opacity-0"
         multiple
         onChange={handleFileChange}
@@ -549,6 +577,15 @@ function PureMultimodalInput({
               fileInputRef={fileInputRef}
               selectedModelId={selectedModelId}
               status={status}
+            />
+            {/* 🔒 ГОЛОС СТОИТ РЯДОМ СО СКРЕПКОЙ: оба действия кладут в сообщение
+                файл, и разносить их по разным углам значит прятать одно из двух.
+                🔒 ЗАПИСЬ ОСТАЁТСЯ ВЛОЖЕНИЕМ, а расшифровка дописывается в поле —
+                голос обязан остаться в ленте, а не превратиться в текст. */}
+            <VoiceButton
+              disabled={status !== "ready"}
+              onRecorded={handleVoiceFile}
+              onText={handleVoiceText}
             />
             <ModelSelectorCompact
               onModelChange={onModelChange}
