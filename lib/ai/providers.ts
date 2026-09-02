@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createOpenAI } from "@ai-sdk/openai";
 import { customProvider } from "ai";
 import { isTestEnvironment } from "../constants";
@@ -17,8 +18,30 @@ import { titleModel } from "./models";
 // 🪦 ЗДЕСЬ БЫЛ `gateway.languageModel(...)`. Убран вместе со списком чужих
 // моделей; переключатель моделей при этом остался — сменился только их источник.
 
+/**
+ * Ключ читается ПРИ КАЖДОМ ОБРАЩЕНИИ, из общего файла проекта.
+ *
+ * 🔒 ОДИН КЛЮЧ НА ВЕСЬ СЕРВЕР: чат не заводит своей копии, иначе он отвечал бы
+ * старым ключом после того, как владелец сменил его на экране бота.
+ * 🔒 БЕЗ КЭША И БЕЗ ПЕРЕЗАПУСКА: введённый ключ действует со следующего
+ * сообщения — «сохранено» и «применено» здесь совпадают.
+ */
+function openAiKey(): string {
+  const path = process.env.FRACTERA_SLOT_ENV || "/opt/fractera/app/.env.local";
+  try {
+    const raw = readFileSync(path, "utf8");
+    const found = (raw.match(/^OPENAI_API_KEY=(.+)$/m) ?? [])[1];
+    if (found?.trim()) {
+      return found.trim();
+    }
+  } catch {
+    // Файла нет — это чужая машина или разработка: берём окружение.
+  }
+  return process.env.OPENAI_API_KEY ?? "";
+}
+
 function openai() {
-  return createOpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
+  return createOpenAI({ apiKey: openAiKey() });
 }
 
 export const myProvider = isTestEnvironment

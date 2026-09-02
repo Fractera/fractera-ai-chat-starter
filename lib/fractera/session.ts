@@ -78,3 +78,15 @@ export async function chatUserIdFor(email: string): Promise<string> {
   const created = await getUser(email);
   return created[0].id;
 }
+
+/**
+ * Роли вошедшего человека — по мнению единственной службы входа.
+ *
+ * 🔒 РОЛЬ СПРАШИВАЕТСЯ ТАМ ЖЕ, ГДЕ ЛИЧНОСТЬ, И НЕ ХРАНИТСЯ У НАС. Скопируй мы
+ * роль в базу чата, она разошлась бы с настоящей в тот день, когда владелец её
+ * поменяет, — и чат пускал бы человека, которого проект уже не пускает.
+ */
+export async function fracteraRoles(): Promise<string[]> {
+  const s = await fracteraSession();
+  return s?.roles ?? [];
+}

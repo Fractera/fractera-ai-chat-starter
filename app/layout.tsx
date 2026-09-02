@@ -5,11 +5,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
 import { SessionProvider } from "next-auth/react";
+import { chatLang } from "@/lib/fractera/i18n";
 
 export const metadata: Metadata = {
-  description: "Next.js chatbot template using the AI SDK.",
+  description: "Агентный чат проекта: разговор с системой и её данными.",
   metadataBase: new URL("https://chat.vercel.ai"),
-  title: "Next.js Chatbot Template",
+  title: "Fractera Agent Chat",
 };
 
 export const viewport = {
@@ -48,15 +49,20 @@ const THEME_COLOR_SCRIPT = `\
   updateThemeColor();
 })();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 🔒 ЯЗЫК СТРАНИЦЫ РЕШАЕТ СЕРВЕР И ЗАПИСЫВАЕТ ЕГО В РАЗМЕТКУ (шаг 96):
+  // островки читают `<html lang>`, а не `navigator.language`. Второй источник
+  // языка разошёлся бы с первым на первой же настройке.
+  const lang = await chatLang();
+
   return (
     <html
       className={`${geist.variable} ${geistMono.variable}`}
-      lang="en"
+      lang={lang}
       suppressHydrationWarning
     >
       <head>

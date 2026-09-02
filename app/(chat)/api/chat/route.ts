@@ -11,6 +11,8 @@ import {
 import { checkBotId } from "botid/server";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
+import { fracteraRoles } from "@/lib/fractera/session";
+import { chatUiOf } from "@/lib/fractera/i18n";
 import { auth, type UserType } from "@/app/(auth)/auth";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
 import {
@@ -92,6 +94,22 @@ export async function POST(request: Request) {
 
     if (!session?.user) {
       return new ChatbotError("unauthorized:chat").toResponse();
+    }
+
+    // 🔒 ЧАТ ТОЛЬКО ДЛЯ АРХИТЕКТОРА (правка владельца 2026-09-02): «если
+    // пользователь войдёт например под правами менеджера или пользователя и
+    // попытается написать сообщение — выводи ошибку».
+    //
+    // 🔒 ЗАМОК СТОИТ НА ДВЕРИ, А НЕ НА ЭКРАНЕ. Проверку в браузере в браузере же
+    // и отключают, а адрес этой двери виден в любой вкладке разработчика — тот
+    // же закон, по которому устроен защищённый слой проекта.
+    //
+    // 🛑 ОТКАЗ ГОВОРИТ ПРИЧИНУ НА ЯЗЫКЕ ЧЕЛОВЕКА, а не «403»: иначе экран
+    // выглядит сломанным, и человек идёт чинить работающее.
+    const roles = await fracteraRoles();
+    if (!roles.includes("architect")) {
+      const ui = chatUiOf(request.headers.get("accept-language"));
+      return Response.json({ code: "forbidden:chat", message: ui.architectOnly }, { status: 403 });
     }
 
     const chatModel = allowedModelIds.has(selectedChatModel)
