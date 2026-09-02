@@ -44,7 +44,14 @@ import {
 } from "../ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
-export function AppSidebar({ user }: { user: User | undefined }) {
+export function AppSidebar({
+  user,
+  signOutHref,
+}: {
+  user: User | undefined;
+  /** Адрес выхода, собранный на сервере по стандарту панели. */
+  signOutHref?: string;
+}) {
   const router = useRouter();
   const { setOpenMobile, toggleSidebar } = useSidebar();
   const { mutate } = useSWRConfig();
@@ -149,7 +156,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
           <SidebarHistory user={user} />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border pt-2 pb-3">
-          {user ? <SidebarUserNav user={user} /> : null}
+          {user ? <SidebarUserNav signOutHref={signOutHref} user={user} /> : null}
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>

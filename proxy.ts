@@ -53,8 +53,11 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!signedIn) {
-    // Форма ссылки взята у сайта, а не придумана: страница `/register` службы
-    // принимает `callbackUrl` и возвращает человека обратно.
+    // 🔒 ФОРМА ССЫЛКИ — СТАНДАРТ ПАНЕЛИ (:3002), А НЕ САЙТА. Проверено в её
+    // раскладке: `${authUrl}/login?redirectUrl=<адрес>` для входа и
+    // `${authUrl}/logout?redirectUrl=<адрес>` для выхода. Сайт зовёт `/register`
+    // с `callbackUrl` — это его случай (регистрация с требованием роли), и
+    // повторять его здесь значило бы завести второй стандарт.
     // 🛑 АДРЕС ВОЗВРАТА СОБИРАЕТСЯ ИЗ ЗАГОЛОВКОВ, А НЕ ИЗ request.url. ✗ измерено:
     // за nginx внутренний адрес выглядит как https://localhost:3600/, и человек
     // после входа возвращался бы в никуда. Прокси видит настоящее имя только в
@@ -66,7 +69,7 @@ export async function proxy(request: NextRequest) {
       ? `${proto}://${host}${request.nextUrl.pathname}${request.nextUrl.search}`
       : new URL(request.url).toString();
     return NextResponse.redirect(
-      `${authBase()}/register?callbackUrl=${encodeURIComponent(back)}&requireRole=user`,
+      `${authBase()}/login?redirectUrl=${encodeURIComponent(back)}`,
     );
   }
 

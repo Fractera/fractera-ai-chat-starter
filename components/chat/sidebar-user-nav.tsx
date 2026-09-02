@@ -76,7 +76,13 @@ const WORDS = {
 
 type KeyState = { present: boolean; masked: string };
 
-export function SidebarUserNav({ user }: { user: User }) {
+export function SidebarUserNav({
+  user,
+  signOutHref,
+}: {
+  user: User;
+  signOutHref?: string;
+}) {
   const lang = useUiLang();
   const w = WORDS[lang];
   const { setTheme, resolvedTheme } = useTheme();
@@ -227,7 +233,7 @@ export function SidebarUserNav({ user }: { user: User }) {
             <DropdownMenuItem asChild data-testid="user-nav-item-auth">
               <a
                 className="w-full cursor-pointer text-[13px]"
-                href={`${process.env.NEXT_PUBLIC_AUTH_URL || ""}/logout`}
+                href={signOutHref || "/"}
               >
                 {w.signOut}
               </a>

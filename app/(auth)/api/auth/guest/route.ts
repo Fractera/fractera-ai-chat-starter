@@ -26,6 +26,6 @@ export async function GET(request: Request) {
   const back = `${url.protocol}//${url.host}/`;
 
   return NextResponse.redirect(
-    `${authBase}/register?callbackUrl=${encodeURIComponent(back)}&requireRole=user&reason=${encodeURIComponent(ui.guestBlocked)}`,
+    `${authBase}/login?redirectUrl=${encodeURIComponent(back)}`,
   );
 }
