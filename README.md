@@ -1,71 +1,88 @@
-<a href="https://chatbot.ai-sdk.dev/demo">
-  <img alt="Chatbot" src="app/(chat)/opengraph-image.png">
-  <h1 align="center">Chatbot</h1>
-</a>
+# Fractera AI Chat
 
-<p align="center">
-    Chatbot (formerly AI Chatbot) is a free, open-source template built with Next.js and the AI SDK that helps you quickly build powerful chatbot applications.
-</p>
+**The second front door into a Fractera project.** The first is the site your visitors see; this one
+is a conversation with the project itself — same account, same files, same server.
 
-<p align="center">
-  <a href="https://chatbot.ai-sdk.dev/docs"><strong>Read Docs</strong></a> ·
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#model-providers"><strong>Model Providers</strong></a> ·
-  <a href="#deploy-your-own"><strong>Deploy Your Own</strong></a> ·
-  <a href="#running-locally"><strong>Running locally</strong></a>
-</p>
-<br/>
+It runs as the eighth service of a Fractera deployment: `chat.<your-domain>`, port `3600`, installed
+automatically when your server is born. You do not deploy this repository yourself — Fractera clones
+it onto your machine. See it live at **[chat.aifa.dev](https://chat.aifa.dev)** (sign-in required).
 
-## Features
+---
 
-- [Next.js](https://nextjs.org) App Router
-  - Advanced routing for seamless navigation and performance
-  - React Server Components (RSCs) and Server Actions for server-side rendering and increased performance
-- [AI SDK](https://ai-sdk.dev/docs/introduction)
-  - Unified API for generating text, structured objects, and tool calls with LLMs
-  - Hooks for building dynamic chat and generative user interfaces
-  - Supports OpenAI, Anthropic, Google, xAI, and other model providers via AI Gateway
-- [shadcn/ui](https://ui.shadcn.com)
-  - Styling with [Tailwind CSS](https://tailwindcss.com)
-  - Component primitives from [Radix UI](https://radix-ui.com) for accessibility and flexibility
-- Data Persistence
-  - [Neon Serverless Postgres](https://vercel.com/marketplace/neon) for saving chat history and user data
-  - [Vercel Blob](https://vercel.com/storage/blob) for efficient file storage
-- [Auth.js](https://authjs.dev)
-  - Simple and secure authentication
+## What it actually adds
 
-## Model Providers
+A Fractera server already gives you a site, a control panel, a data layer, sign-in, a Telegram bot
+and an agent that writes your code. What it did not have was a place to **talk to all of that in
+plain words** — to ask what the server is doing, hand it a photo or a voice note, and get an answer
+that knows your project rather than the internet in general.
 
-This template uses the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) to access multiple AI models through a unified interface. Models are configured in `lib/ai/models.ts` with per-model provider routing. Included models: Mistral, Moonshot, DeepSeek, OpenAI, and xAI.
+That is what this is. Three things make it different from any chat template you could deploy:
 
-### AI Gateway Authentication
+**1. It is the same person you already are.** There is no account here. Sign in once — on the site,
+in the panel, or here — and every service sees the same identity and the same role. Sign in as an
+architect on your site, and the chat knows you as an architect. This is a requirement of the
+product, not a configuration choice: one door, one truth about who you are.
 
-**For Vercel deployments**: Authentication is handled automatically via OIDC tokens.
+**2. Your files stay yours.** Anything you attach — an image, a voice recording, a video, a
+document — lands in **your project's own media library**, on your own server, in the same warehouse
+the Telegram bot fills. A receipt photographed into the bot and a picture dropped into the chat sit
+next to each other, because "all the files of this project" has to be one answer, not three lists in
+three services. Files are served through the project's own route, so the storage key never reaches
+a browser.
 
-**For non-Vercel deployments**: You need to provide an AI Gateway API key by setting the `AI_GATEWAY_API_KEY` environment variable in your `.env.local` file.
+**3. Voice stays voice.** A recording is transcribed for you, but it is **kept as an attachment**,
+not replaced by its text. Intonation, pauses and corrections survive, and you can play the recording
+back where it was said.
 
-With the [AI SDK](https://ai-sdk.dev/docs/introduction), you can also switch to direct LLM providers like [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and [many more](https://ai-sdk.dev/providers/ai-sdk-providers) with just a few lines of code.
+---
 
-## Deploy Your Own
+## How it is wired into the server
 
-You can deploy your own version of Chatbot to Vercel with one click:
+| Concern | How it works here |
+|---|---|
+| **Sign-in** | delegated to the Fractera auth service on `:3001` — the same pipeline the panel uses. This app has no sign-in of its own and no guest mode |
+| **Storage** | its own PostgreSQL database on your server, created and migrated by the build |
+| **Files** | the project's media library on `:3300`, served back through `/api/fractera/media/<id>` |
+| **Models** | your OpenAI key, read from the project's own environment file — one key, shared by the project, the data layer and the knowledge graph |
+| **Address** | `chat.<domain>` behind nginx with a certificate, issued together with `auth.`, `admin.` and `data.` |
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/templates/next.js/chatbot)
+The build itself creates the schema (`pnpm build` runs the migrations first), so a fresh server
+comes up with an empty, correct database and no seed data.
 
-## Running locally
+---
 
-You will need to use the environment variables [defined in `.env.example`](.env.example) to run Chatbot. It's recommended you use [Vercel Environment Variables](https://vercel.com/docs/projects/environment-variables) for this, but a `.env` file is all that is necessary.
+## This is vendored code, and that has rules
 
-> Note: You should not commit your `.env` file or it will expose secrets that will allow others to control access to your various AI and authentication provider accounts.
+The engine is [`vercel/ai-chatbot`](https://github.com/vercel/ai-chatbot), MIT, brought in whole
+rather than depended upon. **[`SOURCE.md`](SOURCE.md) is the authority** on where it came from, how
+to update it from upstream, and every place where we deliberately diverge — the AI Gateway, Vercel
+Blob, Neon and the template's own sign-in are all replaced, and each replacement is explained there
+rather than here.
 
-1. Install Vercel CLI: `npm i -g vercel`
-2. Link local instance with Vercel and GitHub accounts (creates `.vercel` directory): `vercel link`
-3. Download your environment variables: `vercel env pull`
+If you are changing this code: put your edits in separate commits with the reason written down.
+The next update from upstream is a merge, and an unexplained local change is one that quietly gets
+overwritten or quietly kept when it should not be.
+
+---
+
+## Running it on your own machine
+
+This is not a standalone template — it expects a Fractera server next to it. What it needs, at a
+minimum, is a PostgreSQL URL, the address of an auth service, and the path to the project's
+environment file where the OpenAI key lives. The full list of names is in
+[`.env.example`](.env.example); the values that make them work come from your deployment.
 
 ```bash
 pnpm install
-pnpm db:migrate # Setup database or apply latest database changes
-pnpm dev
+pnpm build   # migrations run first, then the production build
+pnpm start   # PORT=3600 in a Fractera deployment
 ```
 
-Your app template should now be running on [localhost:3000](http://localhost:3000).
+For everyday development against a running deployment, `pnpm dev` is enough.
+
+---
+
+## Licence
+
+MIT, inherited from the upstream template — see [`LICENSE`](LICENSE).
+Fractera itself: **[fractera.ai](https://www.fractera.ai)**.
