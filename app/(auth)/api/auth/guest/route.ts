@@ -15,7 +15,6 @@ import { NextResponse } from "next/server";
 // закрывают ТРИ замка — этот, переадресация в `proxy.ts` и проверка роли на
 // двери сообщений. Один замок обходят, три — нет.
 export async function GET(request: Request) {
-  const ui = chatUiOf(request.headers.get("accept-language"));
   const authBase =
     process.env.NEXT_PUBLIC_AUTH_URL ||
     process.env.AUTH_SERVICE_URL ||
