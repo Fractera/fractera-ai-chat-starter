@@ -39,6 +39,7 @@ export type ChatModel = {
   name: string;
   provider: string;
   description: string;
+  /** 🪦 Порядок провайдеров шлюза Vercel. Оставлен в типе историей: шлюза у нас нет. */
   gatewayOrder?: string[];
   reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
 };
