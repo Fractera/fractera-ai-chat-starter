@@ -41,11 +41,17 @@ export async function fracteraSession(): Promise<FracteraSession | null> {
     .getAll()
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
-  if (!cookie) return null;
-
+  // 🛑 ПУСТАЯ КОРЗИНА КУК — НЕ ПОВОД НЕ СПРАШИВАТЬ, И ЭТО ПРО РЕЖИМ БЕЗ ДОМЕНА.
+  // Здесь стоял ранний выход `if (!cookie) return null`. В защищённом режиме он был
+  // безобиден — без куки служба и так ответила бы `401`. Но пока сервер живёт на голом
+  // IP, служба входа отдаёт `demo@local` с ролью архитектора ВСЕМ (`shouldBypassAuth`),
+  // и именно этим режимом человек встречает свежий сервер. Ранний выход означал, что
+  // чат — единственная служба, которая в онбординге никого не пускает: панель и сайт
+  // работают, а он показывает `/welcome` и предлагает войти туда, где входить нечем.
+  // Цена вопроса — один лишний запрос к соседней службе на петле.
   try {
     const res = await fetch(`${authUrl()}/api/session`, {
-      headers: { cookie },
+      headers: cookie ? { cookie } : undefined,
       cache: "no-store",
     });
     if (!res.ok) return null;

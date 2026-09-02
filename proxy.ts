@@ -44,9 +44,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 🛑 СПРАШИВАЕМ СЛУЖБУ ДАЖЕ БЕЗ ЕДИНОЙ КУКИ — ЭТО ПРО РЕЖИМ БЕЗ ДОМЕНА.
+  // Здесь стояло `if (cookie)`: без кук привратник никого не спрашивал и сразу уводил на
+  // заглушку. В защищённом режиме разницы нет — служба и так ответила бы `401`. Но свежий
+  // сервер живёт на голом IP, и там служба входа отдаёт `demo@local` с ролью архитектора
+  // ВСЕМ: панель и сайт в онбординге работают, а чат единственный отвечал бы «войдите»,
+  // при том что входить ещё некуда. Цена — один запрос по петле.
   const cookie = request.headers.get("cookie") ?? "";
   let signedIn = false;
-  if (cookie) {
+  {
     try {
       const authService =
         process.env.AUTH_SERVICE_URL ||
@@ -54,7 +60,7 @@ export async function proxy(request: NextRequest) {
         "http://localhost:3001";
       const res = await fetch(`${authService}/api/session`, {
         cache: "no-store",
-        headers: { cookie },
+        headers: cookie ? { cookie } : undefined,
       });
       signedIn = res.ok && Boolean(((await res.json()) as { email?: string })?.email);
     } catch {
