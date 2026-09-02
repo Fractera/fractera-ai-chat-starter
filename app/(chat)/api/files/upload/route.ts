@@ -91,15 +91,19 @@ export async function POST(request: Request) {
     }
 
     const stored = await uploadToMedia(file);
-    if (!stored) {
-      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
-    }
 
     // 🔒 ФОРМА ОТВЕТА — ТА ЖЕ, ЧТО У ШАБЛОНА (`url`, `pathname`,
     // `contentType`): её ждут поле ввода и лента сообщений, и менять её значило
     // бы править обе стороны ради переезда хранилища.
     return NextResponse.json(stored);
-  } catch {
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  } catch (error) {
+    // 🔒 ПРИЧИНА ОТКАЗА ЕДЕТ ЧЕЛОВЕКУ, А НЕ ОСТАЁТСЯ В ЛОГЕ.
+    // ✗ Оплачено 2026-09-02: здесь стояло глухое «Upload failed» на любой
+    // исход, и настоящая причина — чат читал ответ склада не в той форме —
+    // не была видна ни в браузере, ни на экране. Отладка началась с чтения
+    // чужого кода вместо чтения сообщения об ошибке.
+    const reason = error instanceof Error ? error.message : "Upload failed";
+    console.error("[chat] загрузка вложения не удалась:", reason);
+    return NextResponse.json({ error: reason }, { status: 500 });
   }
 }

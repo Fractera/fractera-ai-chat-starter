@@ -11,6 +11,9 @@ import { readFileSync } from "node:fs";
 
 type Stored = { contentType: string; name: string; pathname: string; url: string };
 
+/** Запись медиатеки — та её часть, что нужна ленте сообщений. */
+type MediaItem = { id: string; mime_type?: string; name?: string };
+
 function slotEnv(key: string): string {
   const path = process.env.FRACTERA_SLOT_ENV || "/opt/fractera/app/.env.local";
   try {
@@ -35,42 +38,46 @@ function dataService(): { key: string; url: string } {
  * оплаченный дважды: собранный по догадке путь однажды перестаёт совпадать с
  * настоящим, и картинка молча исчезает из ленты.
  */
-export async function uploadToMedia(file: File): Promise<Stored | null> {
+export async function uploadToMedia(file: File): Promise<Stored> {
   const { url, key } = dataService();
   if (!key) {
-    return null;
+    throw new Error("Медиатека недоступна: у службы нет ключа слоя данных");
   }
 
   const form = new FormData();
   form.append("file", file, file.name);
 
-  try {
-    const res = await fetch(`${url}/media/upload`, {
-      body: form,
-      headers: { "X-Data-Secret": key },
-      method: "POST",
-    });
-    if (!res.ok) {
-      return null;
-    }
+  const res = await fetch(`${url}/media/upload`, {
+    body: form,
+    headers: { "X-Data-Secret": key },
+    method: "POST",
+  });
 
-    const d = (await res.json()) as { id?: string; url?: string; name?: string; mime_type?: string };
-    if (!d?.id) {
-      return null;
-    }
+  const d = (await res.json().catch(() => null)) as
+    | { ok?: boolean; error?: string; item?: MediaItem }
+    | null;
 
-    // 🔒 ЧЕРЕЗ СВОЙ МАРШРУТ, А НЕ ПРЯМО В СЛОЙ ДАННЫХ: его адрес требует ключа,
-    // и отдавать браузеру ссылку, которая без секрета не открывается, значит
-    // показать человеку сломанную картинку.
-    return {
-      contentType: d.mime_type ?? file.type,
-      name: d.name ?? file.name,
-      pathname: `/api/fractera/media/${d.id}`,
-      url: `/api/fractera/media/${d.id}`,
-    };
-  } catch {
-    return null;
+  // 🔒 СКЛАД ОТВЕЧАЕТ КОНВЕРТОМ `{ ok, item }`, А НЕ САМОЙ ЗАПИСЬЮ — ИЗМЕРЕНО
+  // ЖИВЬЁМ 2026-09-02 запросом к `:3300`, а не выведено по форме соседней двери.
+  // ✗ Оплачено: код читал `id` на верхнем уровне ответа, получал `undefined`
+  // при КАЖДОЙ успешной загрузке и говорил человеку «Upload failed». Файл при
+  // этом ложился в медиатеку — отказ был не только ложным, но и оставлял в
+  // складе запись, о которой чат ничего не знал.
+  if (!(res.ok && d?.ok && d.item?.id)) {
+    throw new Error(d?.error ?? `Медиатека отказала: HTTP ${res.status}`);
   }
+
+  const item = d.item;
+
+  // 🔒 ЧЕРЕЗ СВОЙ МАРШРУТ, А НЕ ПРЯМО В СЛОЙ ДАННЫХ: его адрес требует ключа,
+  // и отдавать браузеру ссылку, которая без секрета не открывается, значит
+  // показать человеку сломанную картинку.
+  return {
+    contentType: item.mime_type ?? file.type,
+    name: item.name ?? file.name,
+    pathname: `/api/fractera/media/${item.id}`,
+    url: `/api/fractera/media/${item.id}`,
+  };
 }
 
 /** Отдать файл медиатеки браузеру: ключ остаётся на сервере. */
