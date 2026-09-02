@@ -683,7 +683,11 @@ function PureAttachmentsButton({
 }) {
   const { data: modelsResponse } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
-    (url: string) => fetch(url).then((r) => r.json()),
+    (url: string) =>
+      // 🔒 `no-store`: у браузеров, успевших закэшировать ответ прежней двери
+      // на сутки, новый заголовок не спросят — они отдадут старый список из
+      // своего кэша. Признак `vision` оттуда гасит скрепку вложений молча.
+      fetch(url, { cache: "no-store" }).then((r) => r.json()),
     { dedupingInterval: 3_600_000, revalidateOnFocus: false }
   );
 
@@ -830,7 +834,11 @@ function PureModelSelectorCompact({
   const [open, setOpen] = useState(false);
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
-    (url: string) => fetch(url).then((r) => r.json()),
+    (url: string) =>
+      // 🔒 `no-store`: у браузеров, успевших закэшировать ответ прежней двери
+      // на сутки, новый заголовок не спросят — они отдадут старый список из
+      // своего кэша. Признак `vision` оттуда гасит скрепку вложений молча.
+      fetch(url, { cache: "no-store" }).then((r) => r.json()),
     { dedupingInterval: 3_600_000, revalidateOnFocus: false }
   );
 
