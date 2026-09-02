@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { chatUiOf } from "@/lib/fractera/i18n";
 
 // ГОСТЕВОЙ ВХОД ЗАКРЫТ (правка владельца 2026-09-02).
 //
@@ -22,8 +21,13 @@ export async function GET(request: Request) {
     process.env.AUTH_SERVICE_URL ||
     "http://localhost:3001";
 
-  const url = new URL(request.url);
-  const back = `${url.protocol}//${url.host}/`;
+  // 🛑 АДРЕС ВОЗВРАТА — ИЗ ЗАГОЛОВКОВ NGINX, А НЕ ИЗ request.url. ✗ измерено
+  // дважды за день: внутренний адрес за прокси выглядит как localhost:3600, и
+  // человек после входа попадал бы в никуда. Тот же приём, что в proxy.ts.
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const back = host ? `${proto}://${host}/` : new URL(request.url).origin + "/";
 
   return NextResponse.redirect(
     `${authBase}/login?redirectUrl=${encodeURIComponent(back)}`,
