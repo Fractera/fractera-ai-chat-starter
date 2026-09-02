@@ -1,5 +1,5 @@
 import { compare } from "bcrypt-ts";
-import NextAuth, { type DefaultSession } from "next-auth";
+import NextAuth, { type DefaultSession, type Session } from "next-auth";
 import type { DefaultJWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { DUMMY_PASSWORD } from "@/lib/constants";
@@ -114,13 +114,18 @@ export const {
 //
 // 🛑 ГОСТЕВОГО ВХОДА БОЛЬШЕ НЕТ ПО СМЫСЛУ: не вошедший человек сессии не
 // получает вовсе — его уводит к службе входа proxy.ts.
-export async function auth(): Promise<{
-  user: { id: string; email: string; name?: string | null; type: UserType };
-} | null> {
+export async function auth(): Promise<Session | null> {
   const s = await fracteraSession();
   if (!s) return null;
 
   const id = await chatUserIdFor(s.email);
-  return { user: { id, email: s.email, name: s.email, type: "regular" } };
+  // 🔒 ФОРМА ОТВЕТА — ТА ЖЕ, ЧТО У ШАБЛОНА, ВКЛЮЧАЯ `expires`: вызывающие места
+  // типизированы `Session`, и своя форма рядом сломала бы их все. Срок берём с
+  // запасом суток: настоящий срок держит служба входа, здесь он лишь заполняет
+  // обязательное поле.
+  return {
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    user: { id, email: s.email, name: s.email, type: "regular" as UserType },
+  } as Session;
 }
 
