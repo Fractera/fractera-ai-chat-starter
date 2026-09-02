@@ -55,7 +55,16 @@ export async function proxy(request: NextRequest) {
   if (!signedIn) {
     // Форма ссылки взята у сайта, а не придумана: страница `/register` службы
     // принимает `callbackUrl` и возвращает человека обратно.
-    const back = new URL(request.url).toString();
+    // 🛑 АДРЕС ВОЗВРАТА СОБИРАЕТСЯ ИЗ ЗАГОЛОВКОВ, А НЕ ИЗ request.url. ✗ измерено:
+    // за nginx внутренний адрес выглядит как https://localhost:3600/, и человек
+    // после входа возвращался бы в никуда. Прокси видит настоящее имя только в
+    // x-forwarded-host / x-forwarded-proto, которые ставит nginx.
+    const host =
+      request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+    const proto = request.headers.get("x-forwarded-proto") ?? "https";
+    const back = host
+      ? `${proto}://${host}${request.nextUrl.pathname}${request.nextUrl.search}`
+      : new URL(request.url).toString();
     return NextResponse.redirect(
       `${authBase()}/register?callbackUrl=${encodeURIComponent(back)}&requireRole=user`,
     );
