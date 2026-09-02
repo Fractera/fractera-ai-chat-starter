@@ -3,7 +3,7 @@ import NextAuth, { type DefaultSession, type Session } from "next-auth";
 import type { DefaultJWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { DUMMY_PASSWORD } from "@/lib/constants";
-import { createGuestUser, getUser } from "@/lib/db/queries";
+import { getUser } from "@/lib/db/queries";
 import { authConfig } from "./auth.config";
 import { chatUserIdFor, fracteraSession } from "@/lib/fractera/session";
 
@@ -88,14 +88,16 @@ export const {
         password: { label: "Password", type: "password" },
       },
     }),
-    Credentials({
-      async authorize() {
-        const [guestUser] = await createGuestUser();
-        return { ...guestUser, type: "guest" };
-      },
-      credentials: {},
-      id: "guest",
-    }),
+    // 🪦 ПРОВАЙДЕР "guest" УДАЛЁН 2026-09-02 (шаг 96). Он заводил безымянного
+    // пользователя ЛЮБОМУ, кто дошёл до стандартного колбэка NextAuth
+    // (`/api/auth/callback/guest`) — то есть был писателем в базу без всякой
+    // авторизации, в обход трёх наших замков: те стоят на нашей двери
+    // `/api/auth/guest`, в `proxy.ts` и на двери сообщений, а этот путь
+    // NextAuth открывает сам.
+    //
+    // ✗ ИЗМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО: в базе чата за сутки накопилось 126 строк
+    // вида `guest-<время>` при ОДНОМ настоящем разговоре. Своего входа у чата
+    // нет по закону — значит и провайдеру взяться неоткуда.
   ],
 });
 
