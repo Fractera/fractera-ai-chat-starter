@@ -19,8 +19,8 @@ import { fracteraRoles } from "@/lib/fractera/session";
 // 🛑 НАРУЖУ КЛЮЧ НЕ ВЫХОДИТ НИКОГДА. Отдаём только признак «есть» и первые
 // символы: маска отвечает на вопрос «тот ли ключ», не отдавая сам ключ.
 
+// 🔒 Узел, а не край: читаем файл проекта — в краевой среде файловой системы нет.
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 function slotEnvPath(): string {
   return process.env.FRACTERA_SLOT_ENV || "/opt/fractera/app/.env.local";
