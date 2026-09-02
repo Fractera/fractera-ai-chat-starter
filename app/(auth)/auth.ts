@@ -124,4 +124,3 @@ export async function auth(): Promise<{
   return { user: { id, email: s.email, name: s.email, type: "regular" } };
 }
 
-export { nextAuth };
