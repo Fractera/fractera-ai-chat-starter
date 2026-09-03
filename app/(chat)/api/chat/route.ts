@@ -13,7 +13,12 @@ import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { fracteraRoles } from "@/lib/fractera/session";
 import { channelOfChat } from "@/lib/fractera/channels";
-import { escapeTelegramHtml, sendToChannel, textOf } from "@/lib/fractera/answer";
+import {
+  escapeTelegramHtml,
+  mirrorAttachments,
+  sendToChannel,
+  textOf,
+} from "@/lib/fractera/answer";
 import { inlineAttachmentsForModel } from "@/lib/fractera/media";
 import { chatUiOf } from "@/lib/fractera/i18n";
 import { auth } from "@/app/(auth)/auth";
@@ -238,6 +243,10 @@ export async function POST(request: Request) {
             "HTML"
           );
         }
+        // 🔒 ШАГ 105 — ВЛОЖЕНИЯ ЗЕРКАЛЯТСЯ ТОЖЕ (владелец, 2026-09-03: «мне нужно чтобы в Telegram
+        // приходили все данные»). Раньше зеркалился только текст — снимок, брошенный в веб-чат,
+        // в Telegram не долетал вовсе, даже когда рядом был текст.
+        await mirrorAttachments(message.parts, mirrorTarget.channel, mirrorTarget.chatId, mirrorTarget.bot);
       }
     }
 
@@ -467,6 +476,15 @@ export async function POST(request: Request) {
                 mirrorTarget.channel,
                 mirrorTarget.chatId,
                 mirrorText,
+                mirrorTarget.bot
+              );
+            }
+            // 🔒 ШАГ 105 — вложения ответа (документы/картинки от инструментов) тоже зеркалятся.
+            if (lastAssistant) {
+              await mirrorAttachments(
+                lastAssistant.parts,
+                mirrorTarget.channel,
+                mirrorTarget.chatId,
                 mirrorTarget.bot
               );
             }

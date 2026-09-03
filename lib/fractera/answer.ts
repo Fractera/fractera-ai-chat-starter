@@ -5,6 +5,7 @@ import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { getLanguageModel, hasOpenAiKey } from "@/lib/ai/providers";
 import { getChatById, getMessagesByChatId, saveMessages } from "@/lib/db/queries";
 import { type Channel, channelOfChat } from "./channels";
+import { fetchMedia } from "./media";
 import { notifyChat } from "./notify";
 import { slotEnv } from "./slot-env";
 
@@ -99,6 +100,93 @@ export async function sendToChannel(
     return r.ok ? { ok: true } : { error: d.error ?? `служба ответила ${r.status}`, ok: false };
   } catch (e) {
     return { error: String((e as Error).message ?? e), ok: false };
+  }
+}
+
+/**
+ * Файл в Telegram (шаг 105). Байты берутся из МЕДИАТЕКИ ПРОЕКТА тем же приёмом, что
+ * `inlineAttachmentsForModel` — `fetchMedia`, а не второй способ добраться до склада.
+ *
+ * 🔒 РОД РЕШАЕТ МЕТОД ТАК ЖЕ, КАК В СЛУЖБЕ (`/telegram/sendFile`): `image` → фото,
+ * `audio` → голосовое, всё остальное → документ. Вторая копия этого правила здесь не
+ * заводится — служба уже решает это сама по полю `kind`, мы его только называем.
+ */
+async function sendFileToChannel(
+  channel: Channel,
+  chatId: string,
+  base64: string,
+  kind: "image" | "audio" | "document",
+  name: string,
+  bot?: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  if (channel !== "telegram") {
+    return { error: `канал ${channel} не умеет отправлять`, ok: false };
+  }
+  try {
+    const suffix = bot ? `?bot=${encodeURIComponent(bot)}` : "";
+    const r = await fetch(`${channelsUrl()}/telegram/sendFile${suffix}`, {
+      body: JSON.stringify({ base64, chatId, kind, name }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+      signal: AbortSignal.timeout(60_000),
+    });
+    const d = (await r.json().catch(() => ({}))) as { error?: string };
+    return r.ok ? { ok: true } : { error: d.error ?? `служба ответила ${r.status}`, ok: false };
+  } catch (e) {
+    return { error: String((e as Error).message ?? e), ok: false };
+  }
+}
+
+function attachmentKind(mediaType: string | undefined): "image" | "audio" | "document" {
+  const top = (mediaType ?? "").split("/")[0];
+  if (top === "image") {
+    return "image";
+  }
+  if (top === "audio") {
+    return "audio";
+  }
+  return "document";
+}
+
+/**
+ * Зеркалирование вложений сообщения в связанный Telegram (шаг 105, продолжение шага 103).
+ *
+ * 🔒 ЗЕРКАЛИТСЯ ТОЛЬКО ТО, ЧТО ЛЕЖИТ В НАШЕЙ МЕДИАТЕКЕ. `/api/fractera/media/<id>` — единственный
+ * адрес, за которым стоят настоящие байты; часть с чужим или отсутствующим `url` пропускается
+ * молча, а не ломает отправку остальных вложений и текста.
+ */
+export async function mirrorAttachments(
+  parts: unknown,
+  channel: Channel,
+  chatId: string,
+  bot?: string | null
+): Promise<void> {
+  if (!Array.isArray(parts)) {
+    return;
+  }
+  for (const part of parts) {
+    const p = part as {
+      type?: string;
+      url?: string;
+      mediaType?: string;
+      name?: string;
+      filename?: string;
+    };
+    if (p?.type !== "file" || typeof p.url !== "string") {
+      continue;
+    }
+    const prefix = "/api/fractera/media/";
+    if (!p.url.startsWith(prefix)) {
+      continue;
+    }
+    const id = p.url.slice(prefix.length);
+    const res = await fetchMedia(id);
+    if (!res) {
+      continue;
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const name = p.filename ?? p.name ?? "file";
+    await sendFileToChannel(channel, chatId, buf.toString("base64"), attachmentKind(p.mediaType), name, bot);
   }
 }
 
