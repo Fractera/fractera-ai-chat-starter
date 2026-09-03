@@ -47,6 +47,8 @@ export type InboundMessage = {
   fileId?: string | null;
   /** Какой бот принёс сообщение: файл забирается его токеном (99-3). */
   bot?: string | null;
+  /** Его имя у Telegram — для заголовка разговора. */
+  botName?: string | null;
 };
 
 /**
@@ -151,6 +153,31 @@ export async function ownerUserId(): Promise<string> {
 }
 
 /**
+ * Заголовок разговора канала.
+ *
+ * 🔒 РАЗЛИЧАЕТ ИМЯ БОТА, А НЕ ПОРЯДКОВЫЙ НОМЕР (2026-09-03). Владелец предложил
+ * счётчик — «Telegram · Roma Armstrong (2)», — и он верно указал на проблему:
+ * один человек, написавший ДВУМ ботам, получает от Telegram два разных номера и
+ * два разговора с одинаковой подписью.
+ *
+ * 🛑 НО СЧЁТЧИК ОТВЕЧАЕТ НЕ НА ТОТ ВОПРОС. Он говорит, что разговоров два, и
+ * молчит о том, КОТОРЫЙ из них какой: открыв второй, человек не знает, тот ли
+ * это бот. Различает их имя бота — оно и стоит в заголовке.
+ *
+ * Один бот — подписи нет: она появляется ровно тогда, когда есть что различать.
+ */
+export function chatTitle(msg: {
+  channel: Channel;
+  who?: string | null;
+  chatId: string;
+  botName?: string | null;
+}): string {
+  const head = msg.channel === "telegram" ? "Telegram" : msg.channel;
+  const person = msg.who || msg.chatId;
+  return msg.botName ? `${head} · ${person} · @${msg.botName}` : `${head} · ${person}`;
+}
+
+/**
  * Записать разговору его канал.
  *
  * 🔒 ЭТО НЕ ВТОРОЕ ХРАНИЛИЩЕ, А ПОЛЕ РОДНОГО. Закон владельца 2026-09-03:
@@ -162,13 +189,21 @@ export async function setChatChannel(row: {
   channel: Channel;
   chatId: string;
   who: string | null;
+  bot?: string | null;
+  botName?: string | null;
 }): Promise<void> {
   const client = postgres(process.env.POSTGRES_URL ?? "");
   const db = drizzle(client);
   try {
     await db
       .update(chat)
-      .set({ channel: row.channel, channelChatId: row.chatId, channelWho: row.who })
+      .set({
+        channel: row.channel,
+        channelBot: row.bot ?? null,
+        channelBotName: row.botName ?? null,
+        channelChatId: row.chatId,
+        channelWho: row.who,
+      })
       .where(eq(chat.id, row.id));
   } finally {
     await client.end();
@@ -184,7 +219,7 @@ export async function setChatChannel(row: {
  */
 export async function channelOfChat(
   id: string
-): Promise<{ channel: Channel; chatId: string } | null> {
+): Promise<{ channel: Channel; chatId: string; bot: string | null } | null> {
   const client = postgres(process.env.POSTGRES_URL ?? "");
   const db = drizzle(client);
   try {
@@ -192,7 +227,12 @@ export async function channelOfChat(
     if (!(row?.channel && row.channelChatId) || !isChannel(row.channel)) {
       return null;
     }
-    return { channel: row.channel, chatId: row.channelChatId };
+    // 🛑 БОТ ЕДЕТ ВМЕСТЕ С АДРЕСОМ, И БЕЗ ЭТОГО ОТВЕТ УХОДИЛ БЫ ЧУЖИМ.
+    // ✗ найдено вопросом владельца о подписи разговоров: отправка звала службу
+    // без указания бота, та брала первого — а второй бот знает СВОИХ
+    // собеседников, и первый этого номера не знает вовсе. На втором боте ответы
+    // не работали бы, и отказ выглядел бы как «Telegram отверг сообщение».
+    return { bot: row.channelBot ?? null, channel: row.channel, chatId: row.channelChatId };
   } finally {
     await client.end();
   }
@@ -219,12 +259,19 @@ export async function receiveInbound(
     // Иначе отвечать в них было бы нечем, и вылечить это можно было бы только
     // руками в базе. Условие защищает от лишней записи на каждом сообщении.
     if (!existing.channelChatId) {
-      await setChatChannel({ channel: msg.channel, chatId: msg.chatId, id, who: msg.who ?? null });
+      await setChatChannel({
+        bot: msg.bot ?? null,
+        botName: msg.botName ?? null,
+        channel: msg.channel,
+        chatId: msg.chatId,
+        id,
+        who: msg.who ?? null,
+      });
     }
   } else {
     await saveChat({
       id,
-      title: `${msg.channel === "telegram" ? "Telegram" : msg.channel} · ${msg.who || msg.chatId}`,
+      title: chatTitle(msg),
       userId: owner,
       // 🔒 ЛИЧНЫЙ, А НЕ ПУБЛИЧНЫЙ. Переписка человека с ботом по умолчанию
       // видима только ему; открыть её — отдельное осознанное действие.
@@ -233,7 +280,14 @@ export async function receiveInbound(
     // 🔒 КАНАЛ ЗАПИСЫВАЕТСЯ ОТДЕЛЬНЫМ ДЕЙСТВИЕМ, А НЕ ЧЕРЕЗ `saveChat`. Тот
     // пришёл из чужого шаблона и знает ровно четыре поля; расширять его подпись
     // значит удорожать каждое обновление сверху. Наше — рядом и наше.
-    await setChatChannel({ channel: msg.channel, chatId: msg.chatId, id, who: msg.who ?? null });
+    await setChatChannel({
+        bot: msg.bot ?? null,
+        botName: msg.botName ?? null,
+        channel: msg.channel,
+        chatId: msg.chatId,
+        id,
+        who: msg.who ?? null,
+      });
   }
 
   // 🔒 ИДЕНТИФИКАТОР СООБЩЕНИЯ ТОЖЕ ВЫЧИСЛЯЕТСЯ, КОГДА ЕСТЬ ИЗ ЧЕГО. Служба

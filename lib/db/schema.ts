@@ -53,6 +53,15 @@ export const chat = pgTable("Chat", {
   channelChatId: varchar("channelChatId"),
   // Как этого собеседника зовут в канале — для заголовка и подписи в ленте.
   channelWho: varchar("channelWho"),
+  // 🛑 КАКИМ БОТОМ ВЕДЁТСЯ РАЗГОВОР — ЭТО АДРЕСАЦИЯ ОТВЕТА, А НЕ УКРАШЕНИЕ.
+  // ✗ найдено вопросом владельца о подписи: один человек, написавший ДВУМ
+  // ботам, получает от Telegram два разных номера и два разговора. Отправка при
+  // этом звала службу без указания бота, и та брала первого — ответ во второй
+  // разговор уходил бы через чужого бота, который этого собеседника не знает.
+  channelBot: varchar("channelBot"),
+  // Имя бота для заголовка: `Telegram · @человек · @бот`. Идентификатор вечен и
+  // адресует; имя человек читает и меняет в @BotFather — потому хранятся оба.
+  channelBotName: varchar("channelBotName"),
   createdAt: timestamp("createdAt").notNull(),
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   title: text("title").notNull(),

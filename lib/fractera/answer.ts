@@ -3,8 +3,9 @@ import "server-only";
 import { generateText } from "ai";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { getLanguageModel, hasOpenAiKey } from "@/lib/ai/providers";
-import { getMessagesByChatId, saveMessages } from "@/lib/db/queries";
+import { getChatById, getMessagesByChatId, saveMessages } from "@/lib/db/queries";
 import { type Channel, channelOfChat } from "./channels";
+import { notifyChat } from "./notify";
 import { slotEnv } from "./slot-env";
 
 // 🪦 ЭТОТ ФАЙЛ БЫЛ ПАРКОВКОЙ С 2026-09-03 И ВКЛЮЧЁН В ТОТ ЖЕ ДЕНЬ.
@@ -63,13 +64,18 @@ function textOf(parts: unknown): string {
 export async function sendToChannel(
   channel: Channel,
   chatId: string,
-  text: string
+  text: string,
+  bot?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   if (channel !== "telegram") {
     return { error: `канал ${channel} не умеет отправлять`, ok: false };
   }
   try {
-    const r = await fetch(`${channelsUrl()}/telegram/send`, {
+    // 🛑 ОТВЕЧАЕМ ТЕМ БОТОМ, КОТОРОМУ ПРИНАДЛЕЖИТ РАЗГОВОР. ✗ без этого служба
+    // берёт ПЕРВОГО, а он не знает собеседников второго: ответ во второй
+    // разговор не дошёл бы, и отказ читался бы как «Telegram отверг сообщение».
+    const suffix = bot ? `?bot=${encodeURIComponent(bot)}` : "";
+    const r = await fetch(`${channelsUrl()}/telegram/send${suffix}`, {
       body: JSON.stringify({ chatId, text }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -100,10 +106,12 @@ export async function answerInboundMessage(chatId: string): Promise<{
   reason?: string;
 }> {
   const target = await channelOfChat(chatId);
+  // Хозяин нужен, чтобы объявить ответ в ЕГО открытую вкладку.
+  const owner = (await getChatById({ id: chatId }))?.userId ?? "";
 
   const fail = async (reason: string) => {
     if (target) {
-      await sendToChannel(target.channel, target.chatId, reason);
+      await sendToChannel(target.channel, target.chatId, reason, target.bot);
     }
     return { delivered: false, reason, saved: false };
   };
@@ -162,12 +170,19 @@ export async function answerInboundMessage(chatId: string): Promise<{
     ],
   });
 
+  // 🛑 ОТВЕТ ТОЖЕ ОБЪЯВЛЯЕТСЯ ВКЛАДКЕ, ИНАЧЕ ОН ПОЯВИТСЯ ТОЛЬКО ПОСЛЕ
+  // ПЕРЕЗАГРУЗКИ. Уведомление стояло на входящем сообщении; ответ модели
+  // рождается здесь, отдельной записью, и без своего сигнала он для открытой
+  // ленты не существует. Человек увидел бы свой вопрос живьём и ждал бы ответа,
+  // который уже пришёл.
+  await notifyChat(chatId, owner);
+
   if (!target) {
     // Разговор без канала — отвечать наружу некуда, и это законно: ответ уже в
     // ленте, человек его увидит в браузере.
     return { delivered: false, saved: true };
   }
 
-  const sent = await sendToChannel(target.channel, target.chatId, text);
+  const sent = await sendToChannel(target.channel, target.chatId, text, target.bot);
   return { delivered: sent.ok, reason: sent.error, saved: true };
 }
