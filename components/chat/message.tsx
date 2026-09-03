@@ -18,6 +18,7 @@ import { DocumentToolResult } from "./document";
 import { DocumentPreview } from "./document-preview";
 import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
+import { MessageParseSteps } from "./message-parse-steps";
 import { MessageReasoning } from "./message-reasoning";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
@@ -155,9 +156,29 @@ const PurePreviewMessage = ({
     { isStreaming: false, rendered: false, text: "" }
   ) ?? { isStreaming: false, rendered: false, text: "" };
 
+  // 🔒 ШАГ 101 — каркас области размышления, не reasoning: шаги рождает наш код, не модель.
+  const parseSteps = message.parts?.filter(
+    (part) => part.type === "data-parse-step"
+  );
+  let parseStepsRendered = false;
+
   const parts = message.parts?.map((part, index) => {
     const { type } = part;
     const key = `message-${message.id}-part-${index}`;
+
+    if (type === "data-parse-step") {
+      if (parseStepsRendered || !parseSteps?.length) {
+        return null;
+      }
+      parseStepsRendered = true;
+      return (
+        <MessageParseSteps
+          isLoading={isLoading}
+          key={key}
+          steps={parseSteps.map((p) => p.data)}
+        />
+      );
+    }
 
     if (type === "reasoning") {
       if (!mergedReasoning.rendered && mergedReasoning.text) {
