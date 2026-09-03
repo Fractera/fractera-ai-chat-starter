@@ -1,12 +1,17 @@
 // @api inbound message from a channel service becomes a chat message
 
 import { type NextRequest, NextResponse } from "next/server";
+import { answerInboundMessage } from "@/lib/fractera/answer";
 import {
   type InboundMessage,
   isChannel,
   receiveInbound,
   secretMatches,
 } from "@/lib/fractera/channels";
+
+// 🔒 ОТВЕТ МОДЕЛИ ИДЁТ ДОЛЬШЕ УМОЛЧАНИЯ NEXT. Дверь ждёт генерацию, а она
+// занимает секунды; предел по умолчанию оборвал бы её на середине.
+export const maxDuration = 60;
 
 // ДВЕРЬ ВХОДЯЩЕГО СООБЩЕНИЯ ИЗ КАНАЛА (97-2).
 //
@@ -58,7 +63,24 @@ export async function POST(request: NextRequest) {
 
   try {
     const saved = await receiveInbound(msg);
-    return NextResponse.json({ ok: true, ...saved });
+
+    // 🔒 ОТВЕТ РОЖДАЕТСЯ ЗДЕСЬ, А НЕ В СЛУЖБЕ (97-5). Служба переведена в режим
+    // «отдаю приложению»: она больше не отвечает сама, иначе на один вопрос
+    // человек получал бы два ответа — её из графа знаний и наш из чата.
+    //
+    // 🛑 ПОВТОР НЕ ОТВЕЧАЕТ ВТОРОЙ РАЗ. Служба повторяет доставку, если мы не
+    // успели ответить вовремя; без этого условия каждый повтор порождал бы
+    // новый ответ на уже отвеченное.
+    //
+    // 🔒 ЖДЁМ ЗАВЕРШЕНИЯ, А НЕ ОТПУСКАЕМ В ФОН. Служба считает доставку удачной
+    // по нашему ответу; ответив раньше времени, мы сказали бы «принято» о работе,
+    // которая ещё может не выйти. Цена — служба ждёт нас, и это правильная цена.
+    let answered: Awaited<ReturnType<typeof answerInboundMessage>> | null = null;
+    if (!saved.duplicate) {
+      answered = await answerInboundMessage(saved.chatId);
+    }
+
+    return NextResponse.json({ ok: true, ...saved, answered });
   } catch (error) {
     // 🔒 ПРИЧИНА ПИШЕТСЯ В ЛОГ, А НЕ ТОЛЬКО ОТДАЁТСЯ СЛУЖБЕ. Служба ответ
     // выбрасывает: у неё отказ хука намеренно молчаливый, строка остаётся в её
