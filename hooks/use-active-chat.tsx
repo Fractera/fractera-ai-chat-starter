@@ -18,6 +18,7 @@ import {
 import useSWR, { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
 import { useDataStream } from "@/components/chat/data-stream-provider";
+import { useChannelStream } from "@/hooks/use-channel-stream";
 import { getChatHistoryPaginationKey } from "@/components/chat/sidebar-history";
 import { toast } from "@/components/chat/toast";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
@@ -196,6 +197,12 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       setMessages(chatData.messages);
     }
   }, [chatId, chatData?.messages, setMessages]);
+
+  // 🔒 ЖИВОЕ ОБНОВЛЕНИЕ ЛЕНТЫ (100-1, 2026-09-03). Сообщение, положенное другой
+  // службой — сегодня это Telegram, — появляется в открытой вкладке само.
+  // Подключается только к существующему разговору: у нового чата ещё нет ни
+  // строки в базе, ни того, о чём уведомлять.
+  useChannelStream({ chatId, enabled: !isNewChat, setMessages });
 
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {

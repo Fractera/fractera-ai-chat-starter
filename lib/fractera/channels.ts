@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { getChatById, getMessageById, saveChat, saveMessages } from "@/lib/db/queries";
 import { chat, user } from "@/lib/db/schema";
+import { notifyChat } from "./notify";
 import { slotEnv } from "./slot-env";
 
 // СООБЩЕНИЕ, ПРИШЕДШЕЕ ИЗ КАНАЛА, СТАНОВИТСЯ СООБЩЕНИЕМ ЧАТА (97-2).
@@ -256,6 +257,11 @@ export async function receiveInbound(
       },
     ],
   });
+
+  // 🔒 СИГНАЛ ПОСЛЕ ЗАПИСИ, А НЕ ДО НЕЁ (100-1). Обратный порядок заставил бы
+  // вкладку перечитать разговор раньше, чем в нём появилось сообщение, — и она
+  // показала бы прежнее состояние, объявив его новым.
+  await notifyChat(id);
 
   return { chatId: id, created: !existing, duplicate: false, messageId };
 }
