@@ -293,18 +293,40 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
           isCollapsed ? "top-0" : "top-[calc(3.5rem-6px)] cursor-w-resize"
         )}
       />
+      {/* 🛑 ШИРИНА СЧИТАЕТСЯ ОТ СВОЕГО ЛЕВОГО КРАЯ, А НЕ БЕРЁТСЯ КАК `100vw`
+          (2026-09-03, правка поверх вендоренного кода).
+
+          ✗ ОПЛАЧЕНО ВЛАДЕЛЬЦЕМ: «сломался режим определения ширины экрана, для
+          всего чата появилась горизонтальная прокрутка». Ловилось через раз, и
+          вот почему: эти два элемента живут в полосе у ПРАВОГО края боковой
+          панели, а ширину брали во весь экран — то есть торчали за край окна
+          ровно на ширину панели, 256 пикселей. Обычно их прячет
+          `overflow-x: hidden` на `html` и `body`; там, где это правило не
+          действует (другая страница слоя, момент до применения стилей),
+          появляется прокрутка.
+
+          🔒 ВИДИМОГО ИЗМЕНЕНИЯ НЕТ, И ЭТО ПРОВЕРЯЕМО: выступавшая часть всегда
+          была за краем окна и всё равно не рисовалась. Мы отрезаем невидимое.
+
+          🔒 ВЫЧИТАЕМ ТУ ЖЕ ПЕРЕМЕННУЮ, КОТОРОЙ ЗАДАНА ПАНЕЛЬ, а не число: панель
+          меняет ширину при сворачивании, и зашитые 256px разошлись бы с ней при
+          первой же правке темы. */}
       <button
         aria-label="Toggle Sidebar"
         tabIndex={-1}
         onClick={toggleSidebar}
         className={cn(
-          "absolute left-3 h-[6px] w-[100vw] cursor-e-resize",
-          isCollapsed ? "top-0" : "top-[calc(3.5rem-6px)] cursor-w-resize"
+          "absolute left-3 h-[6px] cursor-e-resize",
+          isCollapsed
+            ? "top-0 w-[calc(100vw-var(--sidebar-width-icon))]"
+            : "top-[calc(3.5rem-6px)] w-[calc(100vw-var(--sidebar-width))] cursor-w-resize"
         )}
       />
       <div className={cn(
-        "pointer-events-none absolute bottom-0 left-0 w-[100vw] rounded-tl-[12px] border-t border-l border-sidebar-border opacity-0 transition-opacity duration-150 group-hover/rail:opacity-100",
-        isCollapsed ? "top-0" : "top-14"
+        "pointer-events-none absolute bottom-0 left-0 rounded-tl-[12px] border-t border-l border-sidebar-border opacity-0 transition-opacity duration-150 group-hover/rail:opacity-100",
+        isCollapsed
+          ? "top-0 w-[calc(100vw-var(--sidebar-width-icon))]"
+          : "top-14 w-[calc(100vw-var(--sidebar-width))]"
       )} />
     </div>
   )
