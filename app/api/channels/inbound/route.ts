@@ -40,18 +40,27 @@ export async function POST(request: NextRequest) {
 
   const chatId = String(body.chatId ?? "").trim();
   const text = String(body.text ?? "").trim();
-  if (!(chatId && text)) {
-    // 🛑 ПУСТОЙ ТЕКСТ ОТКЛОНЯЕТСЯ ЗДЕСЬ, А НЕ МОЛЧА ПРОГЛАТЫВАЕТСЯ. Голос и
-    // снимок приезжают без текста — это законные сообщения, но их дом следующий
-    // подшаг: принять их сейчас значило бы записать пустую строку в ленту.
-    return NextResponse.json({ error: "chatId and text are required" }, { status: 400 });
+  const fileId = String(body.fileId ?? "").trim();
+
+  // 🔒 СООБЩЕНИЕ БЕЗ ТЕКСТА, НО С ФАЙЛОМ — ЗАКОННОЕ (97-7, 2026-09-03).
+  // ✗ оплачено проверкой владельца: «сообщение появилось в чате сразу, but only
+  // text, not foto». Прежде дверь требовала текст, и снимок без подписи
+  // отклонялся целиком. Молчаливая фотография означает «посмотри сам», а не
+  // «ничего не произошло» — тот же закон уже записан в самой службе.
+  if (!(chatId && (text || fileId))) {
+    return NextResponse.json(
+      { error: "chatId and text or fileId are required" },
+      { status: 400 }
+    );
   }
 
   const msg: InboundMessage = {
     at: typeof body.at === "string" ? body.at : null,
+    bot: typeof body.bot === "string" ? body.bot : null,
     channel,
     chatId,
     externalId: (body.externalId ?? body.id ?? null) as string | number | null,
+    fileId: fileId || null,
     text,
     who: typeof body.who === "string" ? body.who : null,
   };

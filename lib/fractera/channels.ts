@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { getChatById, getMessageById, saveChat, saveMessages } from "@/lib/db/queries";
 import { chat, user } from "@/lib/db/schema";
+import { pullChannelFile } from "./channel-files";
 import { notifyChat } from "./notify";
 import { slotEnv } from "./slot-env";
 
@@ -36,6 +37,16 @@ export type InboundMessage = {
   who?: string | null;
   at?: string | null;
   externalId?: string | number | null;
+  /**
+   * Идентификатор файла В КАНАЛЕ, а не адрес (97-7).
+   *
+   * 🔒 АДРЕСА У НАС НЕТ И БЫТЬ НЕ ДОЛЖНО: ссылка Telegram содержит токен бота
+   * целиком. По этому идентификатору байты забирает служба, у которой токен и
+   * живёт, — а мы кладём их в медиатеку проекта.
+   */
+  fileId?: string | null;
+  /** Какой бот принёс сообщение: файл забирается его токеном (99-3). */
+  bot?: string | null;
 };
 
 /**
@@ -245,14 +256,40 @@ export async function receiveInbound(
     return { chatId: id, created: !existing, duplicate: true, messageId };
   }
 
+  // 🔒 ФАЙЛ ЗАБИРАЕТСЯ ДО ЗАПИСИ, И ЕГО НЕУДАЧА ЗАПИСИ НЕ МЕШАЕТ (97-7).
+  // Сообщение с непринятым файлом всё равно обязано попасть в ленту: текст
+  // подписи, время и автор — уже ценность. ✗ в прототипе однажды снимок чека
+  // пропал ВМЕСТЕ с сообщением.
+  const file = msg.fileId ? await pullChannelFile(msg.fileId, msg.bot ?? undefined) : null;
+
+  // 🔒 ФАЙЛ ЕДЕТ И ЧАСТЬЮ, И ВЛОЖЕНИЕМ, И ЭТО НЕ ДУБЛИРОВАНИЕ. Лента рисует
+  // `parts` — оттуда картинка видна человеку; поле `attachments` читает модель и
+  // прежний код шаблона. Одно без другого даёт либо невидимый файл, либо файл,
+  // которого не видит модель.
+  const parts: { type: string; text?: string; url?: string; mediaType?: string; filename?: string }[] =
+    [];
+  if (msg.text) {
+    parts.push({ text: msg.text, type: "text" });
+  }
+  if (file) {
+    parts.push({ filename: file.name, mediaType: file.contentType, type: "file", url: file.url });
+  }
+  // Ни текста, ни файла быть не может — дверь такое отклоняет; но если файл не
+  // дался, а текста нет, кладём честную строку вместо пустого пузыря.
+  if (parts.length === 0) {
+    parts.push({ text: "[файл не удалось получить]", type: "text" });
+  }
+
   await saveMessages({
     messages: [
       {
-        attachments: [],
+        attachments: file
+          ? [{ contentType: file.contentType, name: file.name, url: file.url }]
+          : [],
         chatId: id,
         createdAt: msg.at ? new Date(msg.at) : new Date(),
         id: messageId,
-        parts: [{ text: msg.text, type: "text" }],
+        parts,
         role: "user",
       },
     ],
