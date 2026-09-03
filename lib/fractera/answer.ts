@@ -167,13 +167,17 @@ export async function answerInboundMessage(chatId: string): Promise<{
         chatId,
         createdAt: new Date(),
         id: crypto.randomUUID(),
+        // 🔒 ПОРЯДОК В МАССИВЕ — ПОРЯДОК НА ЭКРАНЕ. `parts` рисуются в том порядке, в котором
+        // лежат: «Ход ответа» обязан идти ПЕРЕД текстом, иначе в веб-чате (куда попадают и
+        // Telegram-разговоры) читатель видит готовый ответ раньше объяснения, откуда он взялся —
+        // найдено владельцем 2026-09-03 живым просмотром.
         parts: [
-          { text, type: "text" },
           {
             data: { id: "model-answer", label: "Модель сформировала ответ", status: "done" },
             id: "model-answer",
             type: "data-parse-step",
           },
+          { text, type: "text" },
         ],
         role: "assistant",
       },
