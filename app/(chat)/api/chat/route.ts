@@ -24,7 +24,7 @@ import {
   getModelAvailability,
 } from "@/lib/ai/models";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
-import { getLanguageModel } from "@/lib/ai/providers";
+import { getLanguageModel, hasOpenAiKey } from "@/lib/ai/providers";
 import { createDocument } from "@/lib/ai/tools/create-document";
 import { editDocument } from "@/lib/ai/tools/edit-document";
 import { getWeather } from "@/lib/ai/tools/get-weather";
@@ -111,6 +111,20 @@ export async function POST(request: Request) {
     if (!roles.includes("architect")) {
       const ui = chatUiOf(request.headers.get("accept-language"));
       return Response.json({ code: "forbidden:chat", message: ui.architectOnly }, { status: 403 });
+    }
+
+    // 🛑 БЕЗ КЛЮЧА МОДЕЛИ ОТВЕЧАТЬ НЕЧЕМ, И СКАЗАТЬ ОБ ЭТОМ НАДО ЗДЕСЬ
+    // (правка владельца 2026-09-03). ✗ прежде запрос уходил дальше, падал уже
+    // внутри вызова модели, и человек получал «An error occurred» — фразу
+    // обработчика ошибок, из которой не следует ни причина, ни действие.
+    //
+    // 🔒 ПРОВЕРКА СТОИТ РЯДОМ С ПРОВЕРКОЙ РОЛИ ПО ОДНОЙ ПРИЧИНЕ: обе отвечают на
+    // вопрос «можно ли вообще начинать», и обе обязаны называть причину словами.
+    // Экран, который показывает «что-то пошло не так», отправляет человека
+    // чинить работающее.
+    if (!hasOpenAiKey()) {
+      const ui = chatUiOf(request.headers.get("accept-language"));
+      return Response.json({ code: "bad_request:chat", message: ui.noKeyError }, { status: 400 });
     }
 
     const chatModel = allowedModelIds.has(selectedChatModel)

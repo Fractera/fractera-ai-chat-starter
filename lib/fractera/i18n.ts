@@ -34,6 +34,8 @@ export type ChatUi = {
   keyFailed: string;
   /** Отказы. */
   architectOnly: string;
+  /** Отказ, когда ключа модели нет вовсе. */
+  noKeyError: string;
   guestBlocked: string;
   /** Голос и вложения. */
   voiceHint: string;
@@ -59,6 +61,8 @@ const EN: ChatUi = {
   keyBadFormat: "That does not look like an OpenAI key — they start with sk-",
   keyFailed: "Could not save the key",
   architectOnly: "This chat is for the architect only.",
+  noKeyError:
+    "I cannot answer: it looks like there is no OpenAI key. Open the settings in the left menu, choose the OpenAI setting and enter a paid key.",
   guestBlocked: "Guest access is disabled: sign in to write here.",
   voiceHint: "Dictate a message",
   voiceNoKey: "Voice input needs an OpenAI key.",
@@ -83,6 +87,8 @@ const RU: ChatUi = {
   keyBadFormat: "Это не похоже на ключ OpenAI — они начинаются с sk-",
   keyFailed: "Ключ сохранить не удалось",
   architectOnly: "Этот чат предназначен только для архитектора.",
+  noKeyError:
+    "Не могу ответить: похоже, у вас нет ключа OpenAI. Откройте настройки в левом меню, выберите настройку OpenAI и введите оплаченный ключ.",
   guestBlocked: "Гостевой вход отключён: чтобы писать здесь, войдите в проект.",
   voiceHint: "Надиктовать сообщение",
   voiceNoKey: "Для голосового ввода нужен ключ OpenAI.",
