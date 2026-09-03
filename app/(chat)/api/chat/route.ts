@@ -45,11 +45,7 @@ import {
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
 import { checkIpRateLimit } from "@/lib/ratelimit";
-import {
-  DEMO_PARSE_STEPS,
-  DEMO_STEP_LOADING_MS,
-  DEMO_STEP_REVEAL_MS,
-} from "@/lib/fractera/demo-steps";
+import { DEMO_PARSE_STEPS, DEMO_STEP_DELAY_MS } from "@/lib/fractera/demo-steps";
 import type { ChatMessage, WaitingStatusData } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
@@ -313,21 +309,12 @@ export async function POST(request: Request) {
         // См. `lib/fractera/demo-steps.ts` — там же честно названо, что это витрина,
         // а не настоящий разбор запроса.
         for (const step of DEMO_PARSE_STEPS) {
-          // Такт 1 — точки-загрузка: подпись ещё не показывается, только имитация ожидания.
-          dataStream.write({
-            data: { ...step, status: "pending" },
-            id: step.id,
-            type: "data-parse-step",
-          });
-          await new Promise((resolve) => setTimeout(resolve, DEMO_STEP_LOADING_MS));
-
-          // Такт 2 — подпись «стримится» (печатающийся эффект на клиенте, `.demo-step-stream`).
           dataStream.write({
             data: { ...step, status: "done" },
             id: step.id,
             type: "data-parse-step",
           });
-          await new Promise((resolve) => setTimeout(resolve, DEMO_STEP_REVEAL_MS));
+          await new Promise((resolve) => setTimeout(resolve, DEMO_STEP_DELAY_MS));
         }
 
         // 🔒 ШАГ 101 — каркас области размышления. Persistent-часть (без `transient`):
