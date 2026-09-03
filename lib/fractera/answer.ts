@@ -4,7 +4,6 @@ import { generateText } from "ai";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { getLanguageModel, hasOpenAiKey } from "@/lib/ai/providers";
 import { getChatById, getMessagesByChatId, saveMessages } from "@/lib/db/queries";
-import { DEMO_PARSE_STEPS } from "./demo-steps";
 import { type Channel, channelOfChat } from "./channels";
 import { notifyChat } from "./notify";
 import { slotEnv } from "./slot-env";
@@ -170,14 +169,6 @@ export async function answerInboundMessage(chatId: string): Promise<{
         id: crypto.randomUUID(),
         parts: [
           { text, type: "text" },
-          // 🔒 ХАРДКОР-ВИТРИНА, ТА ЖЕ ЧТО В БРАУЗЕРНОМ ПУТИ — см. `demo-steps.ts`.
-          // Здесь нет живой вкладки, значит нет и посекундной анимации: все
-          // шесть приходят сразу готовыми, вместе с ответом.
-          ...DEMO_PARSE_STEPS.map((step) => ({
-            data: { ...step, status: "done" as const },
-            id: step.id,
-            type: "data-parse-step" as const,
-          })),
           {
             data: { id: "model-answer", label: "Модель сформировала ответ", status: "done" },
             id: "model-answer",
