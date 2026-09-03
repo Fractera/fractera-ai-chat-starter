@@ -42,8 +42,8 @@ function channelsUrl(): string {
   return process.env.CHANNELS_SERVICE_URL || "http://127.0.0.1:3500";
 }
 
-/** Текст сообщения из его частей. Части — договор шаблона, а не наша выдумка. */
-function textOf(parts: unknown): string {
+/** Текст сообщения из его частей. Части — договор шаблона, а не наша выдумка. Общая с шагом 103. */
+export function textOf(parts: unknown): string {
   if (!Array.isArray(parts)) {
     return "";
   }

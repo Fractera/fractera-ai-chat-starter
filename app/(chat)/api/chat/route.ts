@@ -12,6 +12,8 @@ import { checkBotId } from "botid/server";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { fracteraRoles } from "@/lib/fractera/session";
+import { channelOfChat } from "@/lib/fractera/channels";
+import { sendToChannel, textOf } from "@/lib/fractera/answer";
 import { inlineAttachmentsForModel } from "@/lib/fractera/media";
 import { chatUiOf } from "@/lib/fractera/i18n";
 import { auth, type UserType } from "@/app/(auth)/auth";
@@ -225,6 +227,24 @@ export async function POST(request: Request) {
           },
         ],
       });
+
+      // 🔒 ШАГ 103 — ЗЕРКАЛИРОВАНИЕ ВХОДЯЩЕГО (браузер → связанный Telegram). Решение
+      // владельца 2026-09-03: «вся переписка должна отзеркаливаться в связанный Telegram, как
+      // входящие так и исходящие». `channelOfChat` отвечает `null` для чата без Telegram — это и
+      // есть весь фильтр «только связанные»; `sendToChannel` не бросает исключений, отказ
+      // Telegram не должен ронять ответ в браузере.
+      const mirrorTarget = await channelOfChat(id);
+      if (mirrorTarget) {
+        const mirrorText = textOf(message.parts);
+        if (mirrorText) {
+          await sendToChannel(
+            mirrorTarget.channel,
+            mirrorTarget.chatId,
+            mirrorText,
+            mirrorTarget.bot
+          );
+        }
+      }
     }
 
     const modelConfig = chatModels.find((m) => m.id === chatModel);
@@ -439,6 +459,24 @@ export async function POST(request: Request) {
               role: currentMessage.role,
             })),
           });
+
+          // 🔒 ШАГ 103 — ЗЕРКАЛИРОВАНИЕ ИСХОДЯЩЕГО (браузер → связанный Telegram). Тот же
+          // фильтр, что у входящего: `channelOfChat` отвечает `null` для чата без привязки.
+          const mirrorTarget = await channelOfChat(id);
+          if (mirrorTarget) {
+            const lastAssistant = [...finishedMessages]
+              .reverse()
+              .find((m) => m.role === "assistant");
+            const mirrorText = lastAssistant ? textOf(lastAssistant.parts) : "";
+            if (mirrorText) {
+              await sendToChannel(
+                mirrorTarget.channel,
+                mirrorTarget.chatId,
+                mirrorText,
+                mirrorTarget.bot
+              );
+            }
+          }
         }
       },
       onError: (error) => {
