@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { Suspense } from "react";
 import { WelcomeCard, WelcomeSignIn } from "@/components/fractera/welcome";
+import { publicAuthUrl } from "@/lib/fractera/auth-url";
 
 // СТРАНИЦА-ЗАГЛУШКА ДЛЯ НЕАВТОРИЗОВАННОГО (правка владельца 2026-09-02).
 //
@@ -33,9 +34,9 @@ async function SignInLink() {
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? "https";
 
-  // Публичный адрес службы — первым: внутренний `localhost:3001` верен для
-  // запроса сервер-серверу и бессмыслен в адресной строке человека.
-  const authUrl = process.env.NEXT_PUBLIC_AUTH_URL || process.env.AUTH_SERVICE_URL || "";
+  // Адрес выводится из хоста, по которому открыт сам чат; почему именно так —
+  // в `lib/fractera/auth-url.ts`, там же и оплаченный этим дефект.
+  const authUrl = publicAuthUrl(host, proto);
   const back = host ? `${proto}://${host}/` : "";
   const href = authUrl && back
     ? `${authUrl}/login?redirectUrl=${encodeURIComponent(back)}`

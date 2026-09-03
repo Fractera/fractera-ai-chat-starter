@@ -7,6 +7,7 @@ import { DataStreamProvider } from "@/components/chat/data-stream-provider";
 import { ChatShell } from "@/components/chat/shell";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ActiveChatProvider } from "@/hooks/use-active-chat";
+import { publicAuthUrl } from "@/lib/fractera/auth-url";
 import { auth } from "../(auth)/auth";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -43,8 +44,14 @@ async function SidebarShell({ children }: { children: React.ReactNode }) {
   // 🛑 ССЫЛКА ДЛЯ БРАУЗЕРА БЕРЁТ ПУБЛИЧНЫЙ АДРЕС СЛУЖБЫ, А НЕ ВНУТРЕННИЙ.
   // ✗ оплачено дважды за час: `AUTH_SERVICE_URL` у нас `http://localhost:3001`
   // — он верен для запроса сервер-серверу и бессмыслен в адресной строке
-  // человека. Публичный адрес идёт ПЕРВЫМ, внутренний остаётся запасным.
-  const authUrl = process.env.NEXT_PUBLIC_AUTH_URL || process.env.AUTH_SERVICE_URL || "";
+  // человека.
+  //
+  // 🔒 ВЫВОД ЖИВЁТ В ОДНОМ МЕСТЕ (`lib/fractera/auth-url.ts`). ✗ здесь и на
+  // странице приветствия он считался ПО ОТДЕЛЬНОСТИ, и владелец нашёл разницу
+  // живьём: вход вёл на голый IP по http. Две сборки одного адреса расходятся
+  // так, что одна половина работает, — заметить это можно, только нажав обе
+  // кнопки.
+  const authUrl = publicAuthUrl(host, proto);
 
   // 🔒 ВОЗВРАТ ПОСЛЕ ВЫХОДА — СЮДА ЖЕ, ПО СТАНДАРТУ ПАНЕЛИ. Вышедшего встречает
   // страница-заглушка `/welcome`: она существует без авторизации, и поэтому
