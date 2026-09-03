@@ -1,4 +1,4 @@
-import { geolocation, ipAddress } from "@vercel/functions";
+import { geolocation } from "@vercel/functions";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -16,8 +16,7 @@ import { channelOfChat } from "@/lib/fractera/channels";
 import { sendToChannel, textOf } from "@/lib/fractera/answer";
 import { inlineAttachmentsForModel } from "@/lib/fractera/media";
 import { chatUiOf } from "@/lib/fractera/i18n";
-import { auth, type UserType } from "@/app/(auth)/auth";
-import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { auth } from "@/app/(auth)/auth";
 import {
   allowedModelIds,
   chatModels,
@@ -37,7 +36,6 @@ import {
   createStreamId,
   deleteChatById,
   getChatById,
-  getMessageCountByUserId,
   getMessagesByChatId,
   saveChat,
   saveMessages,
@@ -46,7 +44,6 @@ import {
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
-import { checkIpRateLimit } from "@/lib/ratelimit";
 import type { ChatMessage, WaitingStatusData } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
@@ -133,18 +130,10 @@ export async function POST(request: Request) {
       ? selectedChatModel
       : DEFAULT_CHAT_MODEL;
 
-    await checkIpRateLimit(ipAddress(request));
-
-    const userType: UserType = session.user.type;
-
-    const messageCount = await getMessageCountByUserId({
-      differenceInHours: 1,
-      id: session.user.id,
-    });
-
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerHour) {
-      return new ChatbotError("rate_limit:chat").toResponse();
-    }
+    // 🔒 ЛИМИТЫ СНЯТЫ ПО ПРЯМОМУ СЛОВУ ВЛАДЕЛЬЦА 2026-09-03: «Я ни разу такого ограничения не
+    // ставил... убирай лимиты они нам не нужны». Это чат одного архитектора, а не публичное
+    // демо — шаблонные ограничения (10 сообщений/час на пользователя, IP-лимит через Redis)
+    // были унаследованы из `vercel/ai-chatbot` и никогда не были нашим решением.
 
     const isToolApprovalFlow = Boolean(messages);
 
