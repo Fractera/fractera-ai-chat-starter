@@ -120,11 +120,6 @@ const PurePreviewMessage = ({
       (part.type === "reasoning" &&
         "text" in part &&
         part.text?.trim().length > 0) ||
-      // 🔒 ХАРДКОР-ВИТРИНА: без этой строки блок «Ход ответа» существует в
-      // parts, но экран всё равно рисует «Waiting…» до первого текста — вся
-      // анимация точек и печатающегося эффекта играет НЕВИДИМО за заглушкой.
-      // Найдено 2026-09-03 живым просмотром, а не чтением кода.
-      part.type === "data-parse-step" ||
       part.type.startsWith("tool-")
   );
   const isThinking = isAssistant && isLoading && !hasAnyContent;
