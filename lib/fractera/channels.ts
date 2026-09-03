@@ -5,7 +5,7 @@ import { asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { getChatById, getMessageById, saveChat, saveMessages } from "@/lib/db/queries";
-import { user } from "@/lib/db/schema";
+import { chat, user } from "@/lib/db/schema";
 import { slotEnv } from "./slot-env";
 
 // СООБЩЕНИЕ, ПРИШЕДШЕЕ ИЗ КАНАЛА, СТАНОВИТСЯ СООБЩЕНИЕМ ЧАТА (97-2).
@@ -139,6 +139,54 @@ export async function ownerUserId(): Promise<string> {
 }
 
 /**
+ * Записать разговору его канал.
+ *
+ * 🔒 ЭТО НЕ ВТОРОЕ ХРАНИЛИЩЕ, А ПОЛЕ РОДНОГО. Закон владельца 2026-09-03:
+ * единственный источник данных о сообщениях — хранилище чата, и промежуточных
+ * слоёв из-за Telegram не заводим.
+ */
+export async function setChatChannel(row: {
+  id: string;
+  channel: Channel;
+  chatId: string;
+  who: string | null;
+}): Promise<void> {
+  const client = postgres(process.env.POSTGRES_URL ?? "");
+  const db = drizzle(client);
+  try {
+    await db
+      .update(chat)
+      .set({ channel: row.channel, channelChatId: row.chatId, channelWho: row.who })
+      .where(eq(chat.id, row.id));
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Куда отвечать: канал разговора и адрес собеседника в нём.
+ *
+ * 🔒 ЧИТАЕТСЯ ИЗ РАЗГОВОРА, А НЕ ИЗ ЗАГОЛОВКА. Заголовок написан для человека:
+ * начни машина его разбирать — его нельзя ни переименовать, ни перевести.
+ * `null` — обычный разговор в браузере, отвечать наружу некуда, и это норма.
+ */
+export async function channelOfChat(
+  id: string
+): Promise<{ channel: Channel; chatId: string } | null> {
+  const client = postgres(process.env.POSTGRES_URL ?? "");
+  const db = drizzle(client);
+  try {
+    const [row] = await db.select().from(chat).where(eq(chat.id, id));
+    if (!(row?.channel && row.channelChatId) || !isChannel(row.channel)) {
+      return null;
+    }
+    return { channel: row.channel, chatId: row.channelChatId };
+  } finally {
+    await client.end();
+  }
+}
+
+/**
  * Положить входящее сообщение в чат. Возвращает разговор и сообщение.
  *
  * 🔒 ЗАПИСЬ ИДЁТ ГОТОВЫМИ `saveChat`/`saveMessages`, А НЕ СВОИМ SQL. Это чужая
@@ -151,7 +199,14 @@ export async function receiveInbound(
   const id = conversationId(msg.channel, msg.chatId);
   const existing = await getChatById({ id });
 
-  if (!existing) {
+  if (existing) {
+    // 🔒 РАЗГОВОРЫ, ЗАВЕДЁННЫЕ ДО 97-4, КАНАЛА НЕ ЗНАЮТ — ДОПИСЫВАЕМ ЕГО ЗДЕСЬ.
+    // Иначе отвечать в них было бы нечем, и вылечить это можно было бы только
+    // руками в базе. Условие защищает от лишней записи на каждом сообщении.
+    if (!existing.channelChatId) {
+      await setChatChannel({ channel: msg.channel, chatId: msg.chatId, id, who: msg.who ?? null });
+    }
+  } else {
     await saveChat({
       id,
       title: `${msg.channel === "telegram" ? "Telegram" : msg.channel} · ${msg.who || msg.chatId}`,
@@ -160,6 +215,10 @@ export async function receiveInbound(
       // видима только ему; открыть её — отдельное осознанное действие.
       visibility: "private",
     });
+    // 🔒 КАНАЛ ЗАПИСЫВАЕТСЯ ОТДЕЛЬНЫМ ДЕЙСТВИЕМ, А НЕ ЧЕРЕЗ `saveChat`. Тот
+    // пришёл из чужого шаблона и знает ровно четыре поля; расширять его подпись
+    // значит удорожать каждое обновление сверху. Наше — рядом и наше.
+    await setChatChannel({ channel: msg.channel, chatId: msg.chatId, id, who: msg.who ?? null });
   }
 
   // 🔒 ИДЕНТИФИКАТОР СООБЩЕНИЯ ТОЖЕ ВЫЧИСЛЯЕТСЯ, КОГДА ЕСТЬ ИЗ ЧЕГО. Служба
