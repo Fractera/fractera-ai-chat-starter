@@ -156,6 +156,9 @@ export async function answerInboundMessage(chatId: string): Promise<{
     return await fail("Модель вернула пустой ответ.");
   }
 
+  // 🔒 ШАГ 101 — та же форма каркаса, что в браузерном пути (`lib/types.ts` → `ParseStepData`).
+  // Здесь нет `writer` и нет открытой вкладки, которой стримить промежуточный `pending` — шаг
+  // приходит сразу готовым. Ограничение названо в ТЗ подшага, а не найдено постфактум.
   // СНАЧАЛА БАЗА — порядок владельца.
   await saveMessages({
     messages: [
@@ -164,7 +167,14 @@ export async function answerInboundMessage(chatId: string): Promise<{
         chatId,
         createdAt: new Date(),
         id: crypto.randomUUID(),
-        parts: [{ text, type: "text" }],
+        parts: [
+          { text, type: "text" },
+          {
+            data: { id: "model-answer", label: "Модель сформировала ответ", status: "done" },
+            id: "model-answer",
+            type: "data-parse-step",
+          },
+        ],
         role: "assistant",
       },
     ],
