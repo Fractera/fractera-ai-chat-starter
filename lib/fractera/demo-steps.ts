@@ -20,4 +20,13 @@ export const DEMO_PARSE_STEPS: readonly Omit<ParseStepData, "status">[] = [
   { id: "demo-link", label: "Проверка ссылки" },
 ] as const;
 
-export const DEMO_STEP_DELAY_MS = 1000;
+/** Сколько показываются точки-загрузка, прежде чем подпись начинает печататься. */
+export const DEMO_STEP_LOADING_MS = 1000;
+
+/**
+ * Сколько ждать после появления подписи, прежде чем начинать точки следующего шага —
+ * время, за которое печатающийся эффект (`.demo-step-stream`, 0.6s в globals.css) успевает
+ * доиграть на экране. Уточнение владельца 2026-09-03: сначала точки, ЗАТЕМ стрим текста, и
+ * только потом снова точки — а не всё сразу.
+ */
+export const DEMO_STEP_REVEAL_MS = 700;

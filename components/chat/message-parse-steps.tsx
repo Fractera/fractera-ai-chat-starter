@@ -42,6 +42,26 @@ const STATUS_KIND = {
   pending: "active",
 } as const;
 
+// 🔒 ХАРДКОР-ВИТРИНА, ТОЧНОЕ ПОВЕДЕНИЕ ПО СЛОВУ ВЛАДЕЛЬЦА 2026-09-03: сначала
+// точки ("загружается"), ЗАТЕМ подпись появляется печатающимся эффектом —
+// а не сразу целиком. Два состояния, а не одно.
+function StepLabel({ label, status }: { label: string; status: ParseStepData["status"] }) {
+  if (status === "pending") {
+    return (
+      <span aria-label={label} className="demo-step-dots">
+        <span />
+        <span />
+        <span />
+      </span>
+    );
+  }
+  return (
+    <span className="demo-step-stream" key={label}>
+      {label}
+    </span>
+  );
+}
+
 type MessageParseStepsProps = {
   steps: ParseStepData[];
   isLoading: boolean;
@@ -61,7 +81,7 @@ export function MessageParseSteps({ steps, isLoading }: MessageParseStepsProps) 
             className={step.status === "error" ? "text-destructive" : undefined}
             icon={DEMO_ICON[step.id] ?? STATUS_ICON[step.status]}
             key={step.id}
-            label={step.label}
+            label={<StepLabel label={step.label} status={step.status} />}
             status={STATUS_KIND[step.status]}
           />
         ))}
