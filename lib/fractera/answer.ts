@@ -42,6 +42,19 @@ function channelsUrl(): string {
   return process.env.CHANNELS_SERVICE_URL || "http://127.0.0.1:3500";
 }
 
+/**
+ * Экранирование для Telegram `parse_mode: "HTML"` (шаг 104). Разрешает ровно те четыре
+ * символа, которые Telegram трактует как разметку (`< > & "`), а не полный HTML-набор —
+ * текст пользователя не должен становиться разметкой сам по себе, иначе `<b>жирный</b>`,
+ * присланный человеком, стал бы настоящим тегом в чужом сообщении.
+ */
+export function escapeTelegramHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 /** Текст сообщения из его частей. Части — договор шаблона, а не наша выдумка. Общая с шагом 103. */
 export function textOf(parts: unknown): string {
   if (!Array.isArray(parts)) {
@@ -65,7 +78,8 @@ export async function sendToChannel(
   channel: Channel,
   chatId: string,
   text: string,
-  bot?: string | null
+  bot?: string | null,
+  parseMode?: "HTML"
 ): Promise<{ ok: boolean; error?: string }> {
   if (channel !== "telegram") {
     return { error: `канал ${channel} не умеет отправлять`, ok: false };
@@ -76,7 +90,7 @@ export async function sendToChannel(
     // разговор не дошёл бы, и отказ читался бы как «Telegram отверг сообщение».
     const suffix = bot ? `?bot=${encodeURIComponent(bot)}` : "";
     const r = await fetch(`${channelsUrl()}/telegram/send${suffix}`, {
-      body: JSON.stringify({ chatId, text }),
+      body: JSON.stringify({ chatId, parseMode, text }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
       signal: AbortSignal.timeout(20_000),

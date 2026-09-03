@@ -13,7 +13,7 @@ import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { fracteraRoles } from "@/lib/fractera/session";
 import { channelOfChat } from "@/lib/fractera/channels";
-import { sendToChannel, textOf } from "@/lib/fractera/answer";
+import { escapeTelegramHtml, sendToChannel, textOf } from "@/lib/fractera/answer";
 import { inlineAttachmentsForModel } from "@/lib/fractera/media";
 import { chatUiOf } from "@/lib/fractera/i18n";
 import { auth } from "@/app/(auth)/auth";
@@ -226,11 +226,16 @@ export async function POST(request: Request) {
       if (mirrorTarget) {
         const mirrorText = textOf(message.parts);
         if (mirrorText) {
+          // 🔒 ШАГ 104 — ПОМЕТКА ИСТОЧНИКА, ТОЛЬКО У ВХОДЯЩЕГО (владелец, 2026-09-03): «сообщения
+          // которые были входящими... первое из них было исходящим и это нужно отметить...
+          // Ответы... маркировать не нужно». В Telegram оба сообщения выглядят одинаково —
+          // пришедшими ОТ бота, — и без пометки не отличить вопрос человека от ответа модели.
           await sendToChannel(
             mirrorTarget.channel,
             mirrorTarget.chatId,
-            mirrorText,
-            mirrorTarget.bot
+            `<b>Web Chat Input Message:</b> ${escapeTelegramHtml(mirrorText)}`,
+            mirrorTarget.bot,
+            "HTML"
           );
         }
       }
