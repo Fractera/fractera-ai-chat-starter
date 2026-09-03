@@ -1,0 +1,175 @@
+import "server-only";
+
+import { createHash, timingSafeEqual } from "node:crypto";
+import { asc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { getChatById, saveChat, saveMessages } from "@/lib/db/queries";
+import { user } from "@/lib/db/schema";
+import { slotEnv } from "./slot-env";
+
+// СООБЩЕНИЕ, ПРИШЕДШЕЕ ИЗ КАНАЛА, СТАНОВИТСЯ СООБЩЕНИЕМ ЧАТА (97-2).
+//
+// 🔒 TELEGRAM — НЕ ГЛАВНЫЙ ВХОД, И ЭТОТ ФАЙЛ ПОСТРОЕН ИСХОДЯ ИЗ ЭТОГО. Слово
+// владельца 2026-09-03: «Telegram здесь только расширение функциональности для
+// редких кейсов, в большинстве случаев пользователь будет пользоваться мобильным
+// чатом в веб». Поэтому здесь нет ничего, что переделывало бы обычный путь: тот
+// живёт в `app/(chat)/api/chat/route.ts` и остаётся основным.
+//
+// 🔒 КАНАЛ ОБЪЯВЛЕН СПИСКОМ ИЗ ОДНОГО ЗНАЧЕНИЯ ИМЕННО ПОЭТОМУ. Завтра рядом
+// встанут календарь и внешний исполнитель; строка `"telegram"`, зашитая по коду,
+// потребовала бы искать все места, а список правится одной правкой вместе с
+// перечислением.
+export const CHANNELS = ["telegram"] as const;
+export type Channel = (typeof CHANNELS)[number];
+
+export function isChannel(v: unknown): v is Channel {
+  return typeof v === "string" && (CHANNELS as readonly string[]).includes(v);
+}
+
+/** Что служба каналов присылает на дверь. Форма измерена по `services/channels/server.js`. */
+export type InboundMessage = {
+  channel: Channel;
+  chatId: string;
+  text: string;
+  who?: string | null;
+  at?: string | null;
+  externalId?: string | number | null;
+};
+
+/**
+ * Общий секрет двери.
+ *
+ * 🔒 БЕРЁТСЯ ИЗ ОКРУЖЕНИЯ ЧАТА ИЛИ ИЗ ФАЙЛА ПРОЕКТА — своей копии нет. Тот же
+ * секрет лежит в `config.json` службы `:3500`, и он там ОДИН: две правды о
+ * секрете расходятся в тот день, когда его меняют.
+ */
+export function hookSecret(): string {
+  return process.env.CHANNELS_HOOK_SECRET || slotEnv("CHANNELS_HOOK_SECRET");
+}
+
+/**
+ * Сверка секрета.
+ *
+ * 🔒 СРАВНЕНИЕ ПОСТОЯННОГО ВРЕМЕНИ, А НЕ `===`. Обычное сравнение строк выходит
+ * на первом несовпавшем байте, и по времени ответа секрет подбирается посимвольно.
+ * Цена правильного способа — одна функция стандартной библиотеки.
+ *
+ * 🛑 ПУСТОЙ НАСТРОЕННЫЙ СЕКРЕТ ОТКЛЮЧАЕТ ДВЕРЬ, А НЕ ОТКРЫВАЕТ ЕЁ. Не задан
+ * секрет — дверь не принимает никого: «настройка забыта» не имеет права
+ * означать «принимай всех».
+ */
+export function secretMatches(given: string | null): boolean {
+  const want = hookSecret();
+  if (!(want && given)) {
+    return false;
+  }
+  const a = Buffer.from(given);
+  const b = Buffer.from(want);
+  // timingSafeEqual падает на разной длине — длину сверяем отдельно.
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Постоянный идентификатор разговора для собеседника канала.
+ *
+ * 🔒 РАЗГОВОР ОДИН НА ОДИН `chatId` КАНАЛА, И ЭТО ДОПУЩЕНИЕ, ПОДТВЕРЖДЁННОЕ
+ * ВЛАДЕЛЬЦЕМ. Новый разговор на каждое сообщение рассыпал бы переписку на сотни
+ * веток по одной строке, и вопрос «что мы обсуждали вчера» перестал бы иметь
+ * ответ.
+ *
+ * 🔒 ИДЕНТИФИКАТОР ВЫЧИСЛЯЕТСЯ, А НЕ ХРАНИТСЯ В ТАБЛИЦЕ СВЯЗИ. Таблица «канал →
+ * разговор» — это второй источник правды и лишняя миграция чужой схемы; хеш от
+ * `channel:chatId` даёт тот же ответ на любой машине и в любой сессии. Форма —
+ * UUID пятой версии: колонка объявлена `uuid`, и любая другая строка в неё не
+ * ляжет.
+ */
+export function conversationId(channel: Channel, chatId: string): string {
+  const h = createHash("sha1").update(`fractera:${channel}:${chatId}`).digest();
+  const b = Buffer.from(h.subarray(0, 16));
+  b[6] = (b[6] & 0x0f) | 0x50; // версия 5
+  b[8] = (b[8] & 0x3f) | 0x80; // вариант RFC 4122
+  const hex = b.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * Чей это разговор.
+ *
+ * 🔒 РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-03, ДОСЛОВНО: «Ваша учётная запись». Разговор из
+ * канала принадлежит человеку, привязавшему бота, — не новой записи «пользователь
+ * Telegram» и не служебной записи «Telegram». Причина не в экономии: своего входа
+ * у чата нет по закону шага 96, и запись человека, заведённая мимо службы `:3001`,
+ * стала бы второй правдой о людях. Ровно за это удалён провайдер `guest`.
+ *
+ * Явная настройка сильнее умолчания; умолчание — первая заведённая учётная
+ * запись, и оно названо вслух, а не подразумевается.
+ */
+export async function ownerUserId(): Promise<string> {
+  const client = postgres(process.env.POSTGRES_URL ?? "");
+  const db = drizzle(client);
+  try {
+    const wanted = process.env.CHANNELS_OWNER_EMAIL || slotEnv("CHANNELS_OWNER_EMAIL");
+    if (wanted) {
+      const [row] = await db.select().from(user).where(eq(user.email, wanted));
+      if (row) {
+        return row.id;
+      }
+      throw new Error(`CHANNELS_OWNER_EMAIL=${wanted}: такой учётной записи нет`);
+    }
+    const [first] = await db.select().from(user).orderBy(asc(user.createdAt)).limit(1);
+    if (!first) {
+      throw new Error("В чате нет ни одной учётной записи — некому владеть разговором");
+    }
+    return first.id;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Положить входящее сообщение в чат. Возвращает разговор и сообщение.
+ *
+ * 🔒 ЗАПИСЬ ИДЁТ ГОТОВЫМИ `saveChat`/`saveMessages`, А НЕ СВОИМ SQL. Это чужая
+ * вендоренная схема: своя вставка мимо них разошлась бы с шаблоном на первом же
+ * обновлении сверху, и разошлась бы молча.
+ */
+export async function receiveInbound(
+  msg: InboundMessage
+): Promise<{ chatId: string; messageId: string; created: boolean }> {
+  const id = conversationId(msg.channel, msg.chatId);
+  const existing = await getChatById({ id });
+
+  if (!existing) {
+    await saveChat({
+      id,
+      title: `${msg.channel === "telegram" ? "Telegram" : msg.channel} · ${msg.who || msg.chatId}`,
+      userId: await ownerUserId(),
+      // 🔒 ЛИЧНЫЙ, А НЕ ПУБЛИЧНЫЙ. Переписка человека с ботом по умолчанию
+      // видима только ему; открыть её — отдельное осознанное действие.
+      visibility: "private",
+    });
+  }
+
+  // 🔒 ИДЕНТИФИКАТОР СООБЩЕНИЯ ТОЖЕ ВЫЧИСЛЯЕТСЯ, КОГДА ЕСТЬ ИЗ ЧЕГО. Служба
+  // повторит доставку, если приложение не ответило вовремя, — и без этого одно
+  // сообщение легло бы в базу дважды. Нет внешнего номера — обычный случайный.
+  const messageId = msg.externalId
+    ? conversationId(msg.channel, `msg:${msg.chatId}:${msg.externalId}`)
+    : conversationId(msg.channel, `msg:${msg.chatId}:${Date.now()}:${msg.text.slice(0, 64)}`);
+
+  await saveMessages({
+    messages: [
+      {
+        attachments: [],
+        chatId: id,
+        createdAt: msg.at ? new Date(msg.at) : new Date(),
+        id: messageId,
+        parts: [{ text: msg.text, type: "text" }],
+        role: "user",
+      },
+    ],
+  });
+
+  return { chatId: id, created: !existing, messageId };
+}

@@ -7,22 +7,12 @@
 // 🔒 АДРЕС И КЛЮЧ СЛОЯ ДАННЫХ ЧИТАЮТСЯ ИЗ ФАЙЛА ПРОЕКТА, как и ключ модели.
 // Своей копии секрета у чата нет: второй путь секрета расходится с первым молча.
 
-import { readFileSync } from "node:fs";
+import { slotEnv } from "./slot-env";
 
 type Stored = { contentType: string; name: string; pathname: string; url: string };
 
 /** Запись медиатеки — та её часть, что нужна ленте сообщений. */
 type MediaItem = { id: string; mime_type?: string; name?: string };
-
-function slotEnv(key: string): string {
-  const path = process.env.FRACTERA_SLOT_ENV || "/opt/fractera/app/.env.local";
-  try {
-    const raw = readFileSync(path, "utf8");
-    return (raw.match(new RegExp(`^${key}=(.+)$`, "m")) ?? [])[1]?.trim() ?? "";
-  } catch {
-    return "";
-  }
-}
 
 function dataService(): { key: string; url: string } {
   return {
