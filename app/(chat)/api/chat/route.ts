@@ -45,6 +45,7 @@ import {
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
 import { checkIpRateLimit } from "@/lib/ratelimit";
+import { DEMO_PARSE_STEPS, DEMO_STEP_DELAY_MS } from "@/lib/fractera/demo-steps";
 import type { ChatMessage, WaitingStatusData } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
@@ -302,6 +303,19 @@ export async function POST(request: Request) {
           hasModelActivity = true;
           clearHealthCheckTimer();
         };
+
+        // 🔒 ХАРДКОР-ВИТРИНА ШЕСТИ ТИПОВ ШАГА — РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-03,
+        // ПОСТОЯННОЕ: показывается на КАЖДЫЙ вопрос, до настоящего ответа модели.
+        // См. `lib/fractera/demo-steps.ts` — там же честно названо, что это витрина,
+        // а не настоящий разбор запроса.
+        for (const step of DEMO_PARSE_STEPS) {
+          dataStream.write({
+            data: { ...step, status: "done" },
+            id: step.id,
+            type: "data-parse-step",
+          });
+          await new Promise((resolve) => setTimeout(resolve, DEMO_STEP_DELAY_MS));
+        }
 
         // 🔒 ШАГ 101 — каркас области размышления. Persistent-часть (без `transient`):
         // остаётся в `Message_v2.parts` навсегда, реконсилируется по `id`. Сегодня — один
