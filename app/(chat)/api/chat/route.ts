@@ -303,6 +303,15 @@ export async function POST(request: Request) {
           clearHealthCheckTimer();
         };
 
+        // 🔒 ШАГ 101 — каркас области размышления. Persistent-часть (без `transient`):
+        // остаётся в `Message_v2.parts` навсегда, реконсилируется по `id`. Сегодня — один
+        // правдивый шаг-заглушка; настоящие шаги разбора запроса сюда не входят.
+        dataStream.write({
+          data: { id: "model-answer", label: "Модель формирует ответ", status: "pending" },
+          id: "model-answer",
+          type: "data-parse-step",
+        });
+
         const result = streamText({
           activeTools:
             isReasoningModel && !supportsTools
@@ -327,9 +336,19 @@ export async function POST(request: Request) {
           },
           onEnd() {
             stopWaitingStatus();
+            dataStream.write({
+              data: { id: "model-answer", label: "Модель формирует ответ", status: "done" },
+              id: "model-answer",
+              type: "data-parse-step",
+            });
           },
           onError() {
             stopWaitingStatus();
+            dataStream.write({
+              data: { id: "model-answer", label: "Модель формирует ответ", status: "error" },
+              id: "model-answer",
+              type: "data-parse-step",
+            });
           },
           providerOptions: {
             ...(modelConfig?.reasoningEffort && {

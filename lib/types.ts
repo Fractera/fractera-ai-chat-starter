@@ -34,6 +34,18 @@ export type WaitingStatusData = {
   modelName: string;
 };
 
+// 🔒 ШАГ 101 — КАРКАС ОБЛАСТИ РАЗМЫШЛЕНИЯ, А НЕ РАЗБОР ЗАПРОСА. Persistent-часть (в отличие от
+// `waiting-status`, которая transient и живёт только на время генерации): попадает в
+// `Message_v2.parts` и остаётся в истории навсегда — закон единственного хранилища, второй
+// таблицы под шаги не заводим. Сегодня несёт ровно один правдивый шаг-заглушку «модель формирует
+// ответ»; настоящие шаги разбора запроса (реестр признаков, инструменты) — отдельная будущая
+// работа, здесь не спроектирована.
+export type ParseStepData = {
+  id: string;
+  label: string;
+  status: "pending" | "done" | "error";
+};
+
 export type CustomUIDataTypes = {
   textDelta: string;
   imageDelta: string;
@@ -48,6 +60,7 @@ export type CustomUIDataTypes = {
   finish: null;
   "chat-title": string;
   "waiting-status": WaitingStatusData;
+  "parse-step": ParseStepData;
 };
 
 export type ChatMessage = UIMessage<
