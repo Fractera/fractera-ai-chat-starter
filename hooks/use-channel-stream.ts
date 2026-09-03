@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { useSWRConfig } from "swr";
+import { unstable_serialize } from "swr/infinite";
+import { getChatHistoryPaginationKey } from "@/components/chat/sidebar-history";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { ChatMessage } from "@/lib/types";
 
@@ -32,17 +35,22 @@ export function useChannelStream({
   setMessages,
 }: {
   chatId: string;
+  /** Открыт ли существующий разговор. У нового ленту слушать нечего. */
   enabled: boolean;
   setMessages: UseChatHelpers<ChatMessage>["setMessages"];
 }) {
-  useEffect(() => {
-    if (!(enabled && chatId)) {
-      return;
-    }
+  const { mutate } = useSWRConfig();
 
+  useEffect(() => {
+    // 🔒 ПОДКЛЮЧАЕМСЯ ВСЕГДА, ДАЖЕ НА ПУСТОЙ СТРАНИЦЕ НОВОГО ЧАТА (100-2).
+    // ✗ оплачено: слушали только открытый разговор, и новый собеседник не
+    // появлялся в списке слева — узнать о нём было неоткуда. Список
+    // принадлежит человеку, а не разговору.
     const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const source = new EventSource(
-      `${base}/api/channels/events?chatId=${encodeURIComponent(chatId)}`
+      enabled && chatId
+        ? `${base}/api/channels/events?chatId=${encodeURIComponent(chatId)}`
+        : `${base}/api/channels/events`
     );
 
     let stopped = false;
@@ -73,8 +81,22 @@ export function useChannelStream({
     };
 
     source.onmessage = () => {
-      pull();
+      if (enabled && chatId) {
+        pull();
+      }
     };
+
+    // 🔒 СПИСОК РАЗГОВОРОВ ОБНОВЛЯЕТСЯ ОТДЕЛЬНЫМ СОБЫТИЕМ, А НЕ ЗАОДНО С ЛЕНТОЙ.
+    // Это разные вещи с разной ценой: лента перечитывает один разговор, список —
+    // страницы истории. Смешав их, мы качали бы историю на каждое сообщение.
+    //
+    // 🔒 ОБНОВЛЯЕМ ЧУЖИМ КЛЮЧОМ, А НЕ СВОИМ ЗАПРОСОМ: боковая панель уже умеет
+    // читать историю, и второй читатель того же дал бы вторую правду о списке.
+    source.addEventListener("chats", () => {
+      if (!stopped) {
+        mutate(unstable_serialize(getChatHistoryPaginationKey));
+      }
+    });
 
     // 🔒 ОШИБКУ НЕ ГЛУШИМ И НЕ ЛЕЧИМ РУКАМИ: `EventSource` сам переподключается
     // с нарастающей паузой. Своя логика переподключения дала бы вторую очередь
@@ -84,5 +106,5 @@ export function useChannelStream({
       stopped = true;
       source.close();
     };
-  }, [chatId, enabled, setMessages]);
+  }, [chatId, enabled, mutate, setMessages]);
 }

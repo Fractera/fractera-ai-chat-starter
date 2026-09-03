@@ -33,14 +33,18 @@ export const CHAT_CHANNEL = "fractera_chat_message";
  * открытии. Обратный порядок (сначала сигнал, потом запись) обещал бы то, чего
  * ещё нет.
  */
-export async function notifyChat(chatId: string): Promise<void> {
+export async function notifyChat(chatId: string, userId: string): Promise<void> {
   const url = process.env.POSTGRES_URL ?? "";
   if (!url) {
     return;
   }
   const client = postgres(url, { max: 1 });
   try {
-    await client.notify(CHAT_CHANNEL, chatId);
+    // 🔒 ХОЗЯИН ЕДЕТ В СИГНАЛЕ, И ЭТО ЗАЩИТА, А НЕ УДОБСТВО (100-2). Слушателю
+    // нужно знать не только «что-то появилось», но и «у КОГО»: без этого он
+    // либо спрашивал бы базу на каждое чужое уведомление, либо узнавал бы о
+    // существовании чужих разговоров. Оба исхода плохи по-разному.
+    await client.notify(CHAT_CHANNEL, JSON.stringify({ c: chatId, u: userId }));
   } catch {
     // Молча: уведомление — удобство, а не хранение.
   } finally {

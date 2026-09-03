@@ -210,6 +210,9 @@ export async function receiveInbound(
 ): Promise<{ chatId: string; messageId: string; created: boolean; duplicate: boolean }> {
   const id = conversationId(msg.channel, msg.chatId);
   const existing = await getChatById({ id });
+  // Хозяин нужен и для создания, и для уведомления: у существующего берём его,
+  // у нового — того, кто владеет разговорами каналов.
+  const owner = existing ? existing.userId : await ownerUserId();
 
   if (existing) {
     // 🔒 РАЗГОВОРЫ, ЗАВЕДЁННЫЕ ДО 97-4, КАНАЛА НЕ ЗНАЮТ — ДОПИСЫВАЕМ ЕГО ЗДЕСЬ.
@@ -222,7 +225,7 @@ export async function receiveInbound(
     await saveChat({
       id,
       title: `${msg.channel === "telegram" ? "Telegram" : msg.channel} · ${msg.who || msg.chatId}`,
-      userId: await ownerUserId(),
+      userId: owner,
       // 🔒 ЛИЧНЫЙ, А НЕ ПУБЛИЧНЫЙ. Переписка человека с ботом по умолчанию
       // видима только ему; открыть её — отдельное осознанное действие.
       visibility: "private",
@@ -298,7 +301,7 @@ export async function receiveInbound(
   // 🔒 СИГНАЛ ПОСЛЕ ЗАПИСИ, А НЕ ДО НЕЁ (100-1). Обратный порядок заставил бы
   // вкладку перечитать разговор раньше, чем в нём появилось сообщение, — и она
   // показала бы прежнее состояние, объявив его новым.
-  await notifyChat(id);
+  await notifyChat(id, owner);
 
   return { chatId: id, created: !existing, duplicate: false, messageId };
 }

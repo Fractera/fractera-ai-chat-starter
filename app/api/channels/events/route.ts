@@ -49,16 +49,25 @@ export async function GET(request: NextRequest) {
     return new Response("unauthorized", { status: 401 });
   }
 
+  // 🔒 ПОТОК ПРИНАДЛЕЖИТ ЧЕЛОВЕКУ, А НЕ РАЗГОВОРУ (100-2, 2026-09-03).
+  //
+  // ✗ ОПЛАЧЕНО ЗАКАЗОМ ВЛАДЕЛЬЦА «исправь список слева, чтобы новый разговор
+  // появлялся сам»: поток был привязан к ОТКРЫТОМУ разговору, и о разговоре,
+  // которого на экране ещё нет, вкладка узнать не могла по устройству. Новый
+  // собеседник писал боту — и не появлялся в списке до перезагрузки.
+  //
+  // Разговор теперь НЕОБЯЗАТЕЛЕН: он только выбирает, какие сообщения
+  // пересылать. События о списке идут всегда, потому что список принадлежит
+  // человеку целиком.
   const chatId = request.nextUrl.searchParams.get("chatId") ?? "";
-  if (!chatId) {
-    return new Response("chatId required", { status: 400 });
-  }
 
-  const chat = await getChatById({ id: chatId });
-  if (!chat || chat.userId !== session.user.id) {
-    // Тот же ответ на «нет такого» и «чужой»: разные ответы подсказали бы, какие
-    // разговоры существуют.
-    return new Response("not found", { status: 404 });
+  if (chatId) {
+    const chat = await getChatById({ id: chatId });
+    if (!chat || chat.userId !== session.user.id) {
+      // Тот же ответ на «нет такого» и «чужой»: разные ответы подсказали бы,
+      // какие разговоры существуют.
+      return new Response("not found", { status: 404 });
+    }
   }
 
   const url = process.env.POSTGRES_URL ?? "";
@@ -95,10 +104,31 @@ export async function GET(request: NextRequest) {
       let unlisten: (() => Promise<unknown>) | null = null;
       try {
         const sub = await client.listen(CHAT_CHANNEL, (payload) => {
-          // Фильтруем здесь: канал один на приложение, а вкладка ждёт свой
-          // разговор. Канал на разговор означал бы тысячи каналов в базе.
-          if (payload === chatId) {
-            send(`data: ${chatId}\n\n`);
+          // Фильтруем здесь: канал в базе один на приложение. Канал на разговор
+          // означал бы тысячи каналов и столько же соединений.
+          let event: { c?: string; u?: string };
+          try {
+            event = JSON.parse(payload) as { c?: string; u?: string };
+          } catch {
+            return;
+          }
+
+          // 🔒 ЧУЖОЕ ОТБРАСЫВАЕТСЯ ПО ХОЗЯИНУ, И ЭТО РЕШАЕТСЯ БЕЗ ЗАПРОСА К БАЗЕ.
+          // Хозяин приехал в самом сигнале; спрашивать базу на каждое чужое
+          // уведомление значило бы платить запросом за каждое сообщение каждого
+          // человека на сервере.
+          if (!event.u || event.u !== session.user.id || !event.c) {
+            return;
+          }
+
+          // Список разговоров принадлежит человеку — событие о нём идёт всегда,
+          // даже когда открыт другой разговор или ни одного.
+          send(`event: chats\ndata: ${event.c}\n\n`);
+
+          // Сообщения пересылаются только для открытого разговора: остальные
+          // вкладке сейчас не нужны, а их содержимое — лишний повод для запроса.
+          if (chatId && event.c === chatId) {
+            send(`data: ${event.c}\n\n`);
           }
         });
         unlisten = sub.unlisten;
