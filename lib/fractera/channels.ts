@@ -117,11 +117,22 @@ export async function ownerUserId(): Promise<string> {
       }
       throw new Error(`CHANNELS_OWNER_EMAIL=${wanted}: такой учётной записи нет`);
     }
-    const [first] = await db.select().from(user).orderBy(asc(user.createdAt)).limit(1);
-    if (!first) {
+    // 🛑 `demo@local` — НЕ ЧЕЛОВЕК, А ЗАПИСЬ РЕЖИМА БЕЗ ДОМЕНА, И БРАТЬ ЕЁ
+    // ВЛАДЕЛЬЦЕМ НЕЛЬЗЯ. ✗ оплачено 2026-09-03 в тот же день: умолчание «первая
+    // заведённая запись» дало именно её — она создаётся при рождении сервера,
+    // раньше живых людей. Сообщения из Telegram легли ей, владелец вошёл под
+    // своей учётной записью и увидел ПУСТО. Данные были целы и невидимы, что
+    // снаружи неотличимо от «канал не работает».
+    //
+    // 🔒 ПРАВИЛО, А НЕ КОНСТАНТА: пропускаем служебную запись, берём первую
+    // настоящую. Вписать сюда конкретный адрес значило бы сломать это на
+    // следующем сервере, где адрес другой.
+    const all = await db.select().from(user).orderBy(asc(user.createdAt));
+    if (all.length === 0) {
       throw new Error("В чате нет ни одной учётной записи — некому владеть разговором");
     }
-    return first.id;
+    const human = all.find((u) => u.email !== "demo@local");
+    return (human ?? all[0]).id;
   } finally {
     await client.end();
   }
