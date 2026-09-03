@@ -5,6 +5,15 @@
 
 ---
 
+## ✅ ШАГ 104 ЗАКРЫТ — ПОМЕТКА «Web Chat Input Message» У ЗЕРКАЛИРУЕМОГО ВОПРОСА (2026-09-03)
+
+Итог — `completed-steps/104-main.md`. Вопрос человека, зеркалируемый из веб-чата в Telegram, идёт
+жирной пометкой `<b>Web Chat Input Message:</b>` (`parse_mode: HTML`, экранирование через
+`escapeTelegramHtml`); ответ модели — без пометки, как раньше. Затронуты оба репозитория:
+`fractera-chatbot-starter` (`0c6a70d`) и `ai-workspace`, служба `:3500` (`6ce967a1`).
+
+---
+
 ## ✅ ШАГ 103 ЗАКРЫТ — ЗЕРКАЛИРОВАНИЕ ВЕБ-ЧАТА В СВЯЗАННЫЙ TELEGRAM (2026-09-03)
 
 Итог — `completed-steps/103-main.md`. Разговор с `channelChatId` зеркалит обе стороны (вопрос и
