@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { getChatById, saveChat, saveMessages } from "@/lib/db/queries";
+import { getChatById, getMessageById, saveChat, saveMessages } from "@/lib/db/queries";
 import { user } from "@/lib/db/schema";
 import { slotEnv } from "./slot-env";
 
@@ -136,7 +136,7 @@ export async function ownerUserId(): Promise<string> {
  */
 export async function receiveInbound(
   msg: InboundMessage
-): Promise<{ chatId: string; messageId: string; created: boolean }> {
+): Promise<{ chatId: string; messageId: string; created: boolean; duplicate: boolean }> {
   const id = conversationId(msg.channel, msg.chatId);
   const existing = await getChatById({ id });
 
@@ -158,6 +158,22 @@ export async function receiveInbound(
     ? conversationId(msg.channel, `msg:${msg.chatId}:${msg.externalId}`)
     : conversationId(msg.channel, `msg:${msg.chatId}:${Date.now()}:${msg.text.slice(0, 64)}`);
 
+  // 🛑 ПОВТОРНАЯ ДОСТАВКА — ЗАКОННЫЙ ИСХОД, А НЕ ОТКАЗ. ✗ найдено измерением
+  // в тот же час: второй толчок с тем же номером падал на уникальном ключе, и
+  // дверь отвечала `500`. Строка при этом не удваивалась — то есть данные были
+  // целы, а служба видела ошибку и записывала в журнал отказ, которого не было.
+  // «Уже принято» и «не принято» обязаны различаться: иначе первый же повтор
+  // Telegram выглядит как поломка чата.
+  //
+  // 🔒 ПРОВЕРКОЙ, А НЕ ЛОВЛЕЙ КОДА ОШИБКИ. Код `23505` принадлежит драйверу
+  // Postgres и приезжает сюда завёрнутым в чужой класс ошибки: разбирать его
+  // значило бы зависеть от формы чужого исключения, которая меняется с
+  // обновлением шаблона. Один лишний запрос по первичному ключу дешевле.
+  const already = await getMessageById({ id: messageId });
+  if (already.length > 0) {
+    return { chatId: id, created: !existing, duplicate: true, messageId };
+  }
+
   await saveMessages({
     messages: [
       {
@@ -171,5 +187,5 @@ export async function receiveInbound(
     ],
   });
 
-  return { chatId: id, created: !existing, messageId };
+  return { chatId: id, created: !existing, duplicate: false, messageId };
 }
