@@ -43,7 +43,6 @@ export function ChatShell() {
     isLoading,
     votes,
     currentModelId,
-    setCurrentModelId,
     showCreditCardAlert,
     setShowCreditCardAlert,
   } = useActiveChat();
@@ -151,7 +150,7 @@ export function ChatShell() {
                   isLoading={isLoading}
                   messages={messages}
                   onCancelEdit={handleCancelEdit}
-                  onModelChange={setCurrentModelId}
+
                   selectedModelId={currentModelId}
                   selectedVisibilityType={visibilityType}
                   sendMessage={

@@ -214,17 +214,16 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     }
   }, [chatId, isNewChat, setMessages]);
 
-  useEffect(() => {
-    if (chatData && !isNewChat) {
-      const cookieModel = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("chat-model="))
-        ?.split("=")[1];
-      if (cookieModel) {
-        setCurrentModelId(decodeURIComponent(cookieModel));
-      }
-    }
-  }, [chatData, isNewChat]);
+  // 🪦 ЗДЕСЬ ЧИТАЛАСЬ КУКА `chat-model` — ПОСЛЕДНЯЯ МОДЕЛЬ, ВЫБРАННАЯ ЧЕЛОВЕКОМ.
+  // Снято 2026-09-04 (112-2) вместе с самим выбором модели.
+  // 🔒 ПРИЧИНА НЕ В ЧИСТОТЕ, А В ЗАПЕРТОМ СОСТОЯНИИ: писателя у куки больше нет, а
+  // читатель остался бы — и человек, выбравший модель вчера, был бы приколот к ней
+  // НАВСЕГДА, без единого органа управления, чтобы это изменить. Мёртвое чтение
+  // живого значения хуже, чем отсутствие обоих.
+  // 🛑 ДОЛГ, НАЗВАННЫЙ ВСЛУХ: браузерный путь чата отвечает `DEFAULT_CHAT_MODEL`, а
+  // ответ бота берёт модель из `OPENAI_TEXT_MODEL` (`lib/fractera/answer.ts`). Две
+  // правды о модели у одного проекта. Сводятся они там же, где появятся
+  // персональные настройки агентов, — это следующий шаг, а не правка по дороге.
 
   const hasAppendedQueryRef = useRef(false);
   useEffect(() => {
