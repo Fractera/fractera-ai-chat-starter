@@ -1,8 +1,8 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import next from "next";
 import { WebSocketServer } from "ws";
+import { claudeAuthState, claudeBin } from "./lib/fractera/claude-cli.mjs";
 import { redeemPtyTicket } from "./lib/fractera/pty-ticket.mjs";
 
 // СВОЙ СЕРВЕР ЧАТА — NEXT ПЛЮС МОСТ ТЕРМИНАЛА НА ТОМ ЖЕ ПОРТУ (шаг 114-3).
@@ -85,6 +85,13 @@ const CLOSE_POLICY = 1008;
 // оболочке по-прежнему можно набрать `claude` руками — исчезла кнопка, а не
 // возможность.
 const MODES = {
+  // 🔒 ТОКЕНА В КОМАНДЕ НЕТ, И ЭТО НЕ МЕЛОЧЬ. Плагин читает его из
+  // `~/.claude/channels/telegram/.env`, куда его положила дверь `agent-setup`.
+  // Подставить токен прямо сюда было бы на один файл меньше кода — и секрет
+  // уехал бы в ленту терминала и в историю оболочки. Показанный на экране
+  // секрет перестаёт быть секретом.
+  "claude-channel": (bin) =>
+    `${bin} --channels plugin:telegram@claude-plugins-official\n`,
   // `claude-check` команды не печатает: решение принимает НАШ код (см.
   // `alreadyLoggedIn` ниже), а не однострочник в оболочке.
   //
@@ -98,41 +105,6 @@ const MODES = {
   "claude-login": (bin) => `${bin} auth login\n`,
   system: () => null,
 };
-
-/**
- * Вошли ли уже по подписке.
- *
- * 🔒 СПРАШИВАЕМ ПОЛЕ, А НЕ КОД ВОЗВРАТА. У `claude auth status` код возврата
- * нулевой в обоих случаях — она печатает JSON и про вошедшего, и про
- * невошедшего. Единственный честный ответ — поле `loggedIn`.
- *
- * `null` — спросить не удалось (CLI нет, ответ не разобрался). Это НЕ «не
- * вошёл»: разница решает, покажем мы человеку вход или ложное «подключено».
- */
-function alreadyLoggedIn(bin) {
-  try {
-    const out = spawnSync(bin, ["auth", "status"], {
-      encoding: "utf8",
-      timeout: 15_000,
-    });
-    if (out.status !== 0 || !out.stdout) {
-      return null;
-    }
-    const parsed = JSON.parse(out.stdout);
-    return typeof parsed.loggedIn === "boolean" ? parsed.loggedIn : null;
-  } catch {
-    return null;
-  }
-}
-
-function claudeBin() {
-  if (process.env.CLAUDE_BIN) {
-    return process.env.CLAUDE_BIN;
-  }
-  const which = spawnSync("which", ["claude"], { encoding: "utf8" });
-  const found = which.status === 0 ? which.stdout.trim() : "";
-  return found || "claude";
-}
 
 function shellPath() {
   if (process.env.PTY_SHELL) {
@@ -310,7 +282,7 @@ wss.on("connection", (ws) => {
     // о незнании, а не подставляем удобный ответ.
     let command = MODES[mode](bin);
     if (mode === "claude-check") {
-      const state = alreadyLoggedIn(bin);
+      const state = claudeAuthState().loggedIn;
       if (state === true) {
         ws.send(
           "\r\nПодписка Claude Code подключена. " +

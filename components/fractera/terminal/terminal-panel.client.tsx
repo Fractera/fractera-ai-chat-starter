@@ -3,6 +3,7 @@
 import { ArrowLeftIcon, KeyRoundIcon, RotateCcwIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AgentSetupModal } from "@/components/fractera/terminal/agent-setup-modal.client";
 import { AuthFlowModal } from "@/components/fractera/terminal/auth-flow-modal.client";
 import {
   type XtermHandle,
@@ -66,7 +67,7 @@ const RESTORE_MODES = [
   .map((mode) => `${ESC}[${mode}`)
   .join("");
 
-type Mode = "claude-check" | "claude-login" | "system";
+type Mode = "claude-channel" | "claude-check" | "claude-login" | "system";
 
 type Status = "closed" | "connected" | "connecting" | "idle";
 
@@ -74,6 +75,7 @@ export function TerminalPanel() {
   const [status, setStatus] = useState<Status>("idle");
   const [note, setNote] = useState("");
   const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const termRef = useRef<XtermHandle>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -212,8 +214,24 @@ export function TerminalPanel() {
   // 🔒 КНОПКА ВХОДИТ ВСЕГДА, В ОТЛИЧИЕ ОТ ОТКРЫТИЯ ВКЛАДКИ. Вошедшему она нужна
   // ровно затем, зачем нажимают такую кнопку: сменить учётную запись или
   // переделать вход, который он считает испорченным.
+  const handleOpenSetup = useCallback(() => {
+    setSetupOpen(true);
+  }, []);
+
+  const handleCloseSetup = useCallback(() => {
+    setSetupOpen(false);
+  }, []);
+
+  // Вход и запуск канала закрывают окно: дальше человек смотрит в терминал —
+  // там появляется либо ссылка входа, либо код привязки, и окно их закрыло бы.
   const handleLogin = useCallback(() => {
+    setSetupOpen(false);
     connect("claude-login");
+  }, [connect]);
+
+  const handleLaunchChannel = useCallback(() => {
+    setSetupOpen(false);
+    connect("claude-channel");
   }, [connect]);
 
   // 🔒 РУЧНОЙ СБРОС — НЕ ЛИШНЯЯ КНОПКА, А ПРИЗНАНИЕ ГРАНИЦЫ. Два слоя выше
@@ -254,9 +272,9 @@ export function TerminalPanel() {
             убраны: вкладка существует ради одного — подключить подписку. Оболочка
             под ней та же самая, и набрать в ней `claude` по-прежнему можно. */}
         <Button
-          onClick={handleLogin}
+          onClick={handleOpenSetup}
           size="sm"
-          title="Запустить вход заново: claude auth login"
+          title="Подписка Claude Code и Telegram-бот"
           variant="ghost"
         >
           <KeyRoundIcon size={14} />
@@ -295,6 +313,14 @@ export function TerminalPanel() {
           ref={termRef}
         />
       </div>
+
+      {setupOpen ? (
+        <AgentSetupModal
+          onClose={handleCloseSetup}
+          onLaunchChannel={handleLaunchChannel}
+          onLogin={handleLogin}
+        />
+      ) : null}
 
       {authUrl ? (
         <AuthFlowModal
