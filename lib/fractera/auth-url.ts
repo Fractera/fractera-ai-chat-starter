@@ -38,3 +38,41 @@ export function publicAuthUrl(host: string, proto: string): string {
     ""
   );
 }
+
+// ── СОСЕДНИЕ СЛУЖБЫ: САЙТ И ПАНЕЛЬ (BACKLOG 96-9, вторая половина, 2026-09-04) ──
+//
+// 🔒 ТОТ ЖЕ ВЫВОД, ЧТО У ВХОДА, И ЖИВЁТ ОН ЗДЕСЬ ЖЕ — не потому что похоже, а
+// потому что ошибка была бы та же: два места, считающие один адрес, расходятся
+// так, что одна половина работает.
+//
+// 🔒 ПРИСТАВКА ЗАМЕНЯЕТСЯ, А НЕ УГАДЫВАЕТСЯ: `chat.` → голый домен (сайт) и
+// `admin.` (панель) — соседи по одному списку `SUBDOMAINS`, из которого берутся
+// блоки nginx и имена в сертификате.
+//
+// 🔒 РЕЖИМ ПО IP — ЗАПАСНОЙ ПУТЬ, И ОН ЗЕРКАЛО ПАНЕЛЬНОЙ `publicChatUrl()`:
+// там `:3000` → `:3600`, здесь обратно. Порты соседей — факт развёртывания
+// (`3000` приложение, `3002` панель), а не настройка, которую можно разойтись.
+//
+// 🛑 ПУСТАЯ СТРОКА — ЗАКОННЫЙ ОТВЕТ. На машине разработчика соседей может не
+// быть вовсе, и кнопка обязана тогда не появиться: ссылка в никуда хуже её
+// отсутствия — закон, уже оплаченный панелью.
+
+function siblingByHost(host: string, proto: string, prefix: string, port: string): string {
+  if (host.startsWith("chat.")) {
+    const bare = host.slice("chat.".length);
+    return `${proto}://${prefix}${bare}`;
+  }
+  // Режим по IP: `<адрес>:3600` → `<адрес>:<порт соседа>`.
+  const m = host.match(/^(.+):3600$/);
+  return m ? `${proto}://${m[1]}:${port}` : "";
+}
+
+/** Публичный адрес САЙТА (гостевое приложение, `:3000`). */
+export function publicSiteUrl(host: string, proto: string): string {
+  return siblingByHost(host, proto, "", "3000") || process.env.NEXT_PUBLIC_APP_URL || "";
+}
+
+/** Публичный адрес ПАНЕЛИ управления (`admin.`, `:3002`). */
+export function publicAdminUrl(host: string, proto: string): string {
+  return siblingByHost(host, proto, "admin.", "3002") || process.env.NEXT_PUBLIC_ADMIN_URL || "";
+}
