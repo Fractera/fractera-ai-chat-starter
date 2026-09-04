@@ -61,7 +61,7 @@ importers:
         version: 0.24.1
       '@vercel/functions':
         specifier: ^3.7.5
-        version: 3.7.5(ws@8.18.1(bufferutil@4.0.9))
+        version: 3.7.5(ws@8.21.3(bufferutil@4.0.9))
       '@vercel/otel':
         specifier: ^1.12.0
         version: 1.14.2(@opentelemetry/api-logs@0.200.0)(@opentelemetry/api@1.9.1)(@opentelemetry/instrumentation@0.57.2(@opentelemetry/api@1.9.1))(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.57.2(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@1.30.1(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@1.30.1(@opentelemetry/api@1.9.1))
@@ -128,6 +128,9 @@ importers:
       next-themes:
         specifier: ^0.3.0
         version: 0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      node-pty:
+        specifier: ^1.1.0
+        version: 1.1.0
       orderedmap:
         specifier: ^2.1.1
         version: 2.1.1
@@ -206,6 +209,9 @@ importers:
       usehooks-ts:
         specifier: ^3.1.1
         version: 3.1.1(react@19.2.7)
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3(bufferutil@4.0.9)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -3970,9 +3976,15 @@ packages:
       sass:
         optional: true
 
+  node-addon-api@7.1.1:
+    resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
+
   node-gyp-build@4.8.4:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
+
+  node-pty@1.1.0:
+    resolution: {integrity: sha512-20JqtutY6JPXTUnL0ij1uad7Qe1baT46lyolh2sSENDd4sTzKZ4nmAFkeAARDKwmlLjPx6XKRlwRUxwjOy+lUg==}
 
   npm-run-path@4.0.1:
     resolution: {integrity: sha512-S48WzZW777zhNIrn7gxOlISNAqi9ZC/uQFnRdbeIHhZhCA6UqpkOT8T1G7BvfdgP4Er8gF4sUbaS0i7QvIfCWw==}
@@ -4727,6 +4739,18 @@ packages:
 
   ws@8.18.1:
     resolution: {integrity: sha512-RKW2aJZMXeMxVpnZ6bck+RswznaxmzdULiBr6KY7XkTnW8uvt0iT9H5DkHUChXrc+uurzwa0rVI16n/Xzjdz1w==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -6855,11 +6879,11 @@ snapshots:
     dependencies:
       execa: 5.1.1
 
-  '@vercel/functions@3.7.5(ws@8.18.1(bufferutil@4.0.9))':
+  '@vercel/functions@3.7.5(ws@8.21.3(bufferutil@4.0.9))':
     dependencies:
       '@vercel/oidc': 3.8.0
     optionalDependencies:
-      ws: 8.18.1(bufferutil@4.0.9)
+      ws: 8.21.3(bufferutil@4.0.9)
 
   '@vercel/oidc@3.2.0': {}
 
@@ -8457,8 +8481,14 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
 
+  node-addon-api@7.1.1: {}
+
   node-gyp-build@4.8.4:
     optional: true
+
+  node-pty@1.1.0:
+    dependencies:
+      node-addon-api: 7.1.1
 
   npm-run-path@4.0.1:
     dependencies:
@@ -9379,6 +9409,10 @@ snapshots:
     optionalDependencies:
       bufferutil: 4.0.9
     optional: true
+
+  ws@8.21.3(bufferutil@4.0.9):
+    optionalDependencies:
+      bufferutil: 4.0.9
 
   xdg-app-paths@5.5.1:
     dependencies:

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbo",
     "build": "tsx lib/db/migrate && next build",
-    "start": "next start",
+    "start": "node server.mjs",
     "check": "ultracite check",
     "fix": "ultracite fix",
     "prepare": "husky",
@@ -16,7 +16,8 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
-    "test": "export PLAYWRIGHT=True && pnpm exec playwright test"
+    "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
+    "start:next": "next start"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.57",
@@ -59,6 +60,7 @@
     "next": "16.2.10",
     "next-auth": "5.0.0-beta.25",
     "next-themes": "^0.3.0",
+    "node-pty": "^1.1.0",
     "orderedmap": "^2.1.1",
     "papaparse": "^5.5.4",
     "postgres": "^3.4.9",
@@ -85,6 +87,7 @@
     "tailwindcss-animate": "^1.0.7",
     "use-stick-to-bottom": "^1.1.6",
     "usehooks-ts": "^3.1.1",
+    "ws": "^8.21.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -111,5 +114,10 @@
   "lint-staged": {
     "*": "corepack pnpm run fix --"
   },
-  "packageManager": "pnpm@10.32.1"
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "node-pty"
+    ]
+  }
 }

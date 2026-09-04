@@ -15,29 +15,40 @@
 
 const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);
-const OSC = new RegExp(ESC + "\\][^" + BEL + ESC + "]*(?:" + BEL + "|" + ESC + "\\\\)", "g");
-const CSI = new RegExp(ESC + "\\[[0-?]*[ -/]*[@-~]", "g");
+const OSC = new RegExp(`${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)`, "g");
+const CSI = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, "g");
 
-const url = "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user%3Afile_upload&code_challenge=BG1wjx0lu-vCirt2QnOFxOb94_cmXrO0AhjET15_EJc&code_challenge_method=S256&state=dwr1kEo8rMR95bfk2g2t0h1nEtT5pZXwTFZAVFuOCYs";
+const url =
+  "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user%3Afile_upload&code_challenge=BG1wjx0lu-vCirt2QnOFxOb94_cmXrO0AhjET15_EJc&code_challenge_method=S256&state=dwr1kEo8rMR95bfk2g2t0h1nEtT5pZXwTFZAVFuOCYs";
 
-export const DETECT = /https:\/\/claude\.com\/cai\/oauth\/authorize.*?&state=[A-Za-z0-9][A-Za-z0-9_\-]*[A-Za-z0-9]/;
+export const DETECT =
+  /https:\/\/claude\.com\/cai\/oauth\/authorize.*?&state=[A-Za-z0-9][A-Za-z0-9_-]*[A-Za-z0-9]/;
 
 // Дверь 1 — OSC-8. CLI печатает ссылку гиперссылкой, и escape ограничивает её
 // С ОБЕИХ СТОРОН: гадать, где она кончается, не нужно вовсе.
-const OSC8 = new RegExp(ESC + "\\]8;;(https://[^" + BEL + ESC + "]*)(?:" + BEL + "|" + ESC + "\\\\)");
+const OSC8 = new RegExp(
+  `${ESC}\\]8;;(https://[^${BEL}${ESC}]*)(?:${BEL}|${ESC}\\\\)`
+);
 
 export function extractAuthUrl(buf) {
   const byLink = buf.match(OSC8);
-  if (byLink && DETECT.test(byLink[1])) return { url: byLink[1], how: "OSC-8" };
+  if (byLink && DETECT.test(byLink[1])) {
+    return { how: "OSC-8", url: byLink[1] };
+  }
 
   // Дверь 2 — видимый текст, если OSC порвался на границе чанков.
   // Переводы строк удаляются БЕЗ подстановки пробела: заворот PTY склеивается
   // обратно, а настоящий пробел остаётся границей слова. Прежний код ставил
   // на месте перевода пробел и потом удалял ВСЕ пробелы — из-за этого проза
   // после ссылки прилипала к state.
-  const visible = buf.replace(OSC, "").replace(CSI, "").replace(/\r\n|\r|\n/g, "");
+  const visible = buf
+    .replace(OSC, "")
+    .replace(CSI, "")
+    .replace(/\r\n|\r|\n/g, "");
   const m = visible.match(DETECT);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
 
   // Хвост совпадения обрезается по СОСЕДУ В БУФЕРЕ, а не по содержимому
   // совпадения: класс [A-Za-z0-9_-] после state= съедает и «https» второй
@@ -47,8 +58,10 @@ export function extractAuthUrl(buf) {
   const start = m.index;
   let end = start + m[0].length;
   const second = visible.indexOf("https://", start + 8);
-  if (second !== -1 && second < end) end = second;
-  return { url: visible.slice(start, end), how: "текст" };
+  if (second !== -1 && second < end) {
+    end = second;
+  }
+  return { how: "текст", url: visible.slice(start, end) };
 }
 
 // ─── прогон ──────────────────────────────────────────────────────────────────
@@ -57,27 +70,76 @@ function check(name, input, expect) {
   const r = extractAuthUrl(input);
   const got = r ? r.url : null;
   const ok = expect === null ? got === null : got === expect;
-  console.log((ok ? "  ok  " : "  ✗   ") + name + (r ? " [" + r.how + "]" : "") +
-    (ok ? "" : "\n        получено: " + (got === null ? "нет совпадения" : got.slice(-55))));
+  console.log(
+    (ok ? "  ok  " : "  ✗   ") +
+      name +
+      (r ? ` [${r.how}]` : "") +
+      (ok
+        ? ""
+        : "\n        получено: " +
+          (got === null ? "нет совпадения" : got.slice(-55)))
+  );
   return ok;
 }
 
-const live = "If the browser didn't open, visit: " + ESC + "]8;;" + url + ESC + "\\" + url +
-             ESC + "]8;;" + ESC + "\\\r\nPaste code here if prompted > ";
+const live =
+  "If the browser didn't open, visit: " +
+  ESC +
+  "]8;;" +
+  url +
+  ESC +
+  "\\" +
+  url +
+  ESC +
+  "]8;;" +
+  ESC +
+  "\\\r\nPaste code here if prompted > ";
 
 let all = true;
 console.log("ПОЗИТИВНЫЕ:");
 all = check("живой вывод CLI, как замерен на сервере", live, url) && all;
-all = check("порванный escape: OSC не собрался, ссылка удвоена", "]8;;" + url + url + "]8;;\r\nPaste code here if prompted > ", url) && all;
-all = check("перенос строки посреди ссылки (заворот PTY)", url.slice(0, 120) + "\r\n" + url.slice(120) + " Paste code", url) && all;
-all = check("ссылка вплотную к прозе, без OSC вовсе", "visit: " + url + " Paste code here if prompted > ", url) && all;
-all = check("ссылка в самом конце буфера", "visit: " + url, url) && all;
+all =
+  check(
+    "порванный escape: OSC не собрался, ссылка удвоена",
+    `]8;;${url}${url}]8;;\r\nPaste code here if prompted > `,
+    url
+  ) && all;
+all =
+  check(
+    "перенос строки посреди ссылки (заворот PTY)",
+    `${url.slice(0, 120)}\r\n${url.slice(120)} Paste code`,
+    url
+  ) && all;
+all =
+  check(
+    "ссылка вплотную к прозе, без OSC вовсе",
+    `visit: ${url} Paste code here if prompted > `,
+    url
+  ) && all;
+all = check("ссылка в самом конце буфера", `visit: ${url}`, url) && all;
 
 console.log("НЕГАТИВНЫЕ:");
-all = check("страница доков", "смотрите https://claude.com/docs и всё", null) && all;
-all = check("без state", "https://claude.com/cai/oauth/authorize?code=true&client_id=abc", null) && all;
-all = check("чужой хост", "https://evil.com/cai/oauth/authorize?a=1&state=zzz", null) && all;
-all = check("OSC-8 с посторонней ссылкой", ESC + "]8;;https://example.com/x" + ESC + "\\", null) && all;
+all =
+  check("страница доков", "смотрите https://claude.com/docs и всё", null) &&
+  all;
+all =
+  check(
+    "без state",
+    "https://claude.com/cai/oauth/authorize?code=true&client_id=abc",
+    null
+  ) && all;
+all =
+  check(
+    "чужой хост",
+    "https://evil.com/cai/oauth/authorize?a=1&state=zzz",
+    null
+  ) && all;
+all =
+  check(
+    "OSC-8 с посторонней ссылкой",
+    `${ESC}]8;;https://example.com/x${ESC}\\`,
+    null
+  ) && all;
 
 console.log(all ? "\nИТОГ: все девять прошли" : "\nИТОГ: ЕСТЬ ПРОВАЛЫ");
 process.exit(all ? 0 : 1);
