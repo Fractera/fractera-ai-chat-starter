@@ -85,17 +85,45 @@ const CLOSE_POLICY = 1008;
 // оболочке по-прежнему можно набрать `claude` руками — исчезла кнопка, а не
 // возможность.
 const MODES = {
-  // Проверка через `grep` по выводу `auth status`: у подкоманды нет кода
-  // возврата, отличающего вошедшего от невошедшего, — она печатает JSON и в
-  // обоих случаях выходит нулём. Значит спрашиваем то поле, ради которого
-  // пришли.
-  "claude-check": (bin) =>
-    `${bin} auth status 2>/dev/null | grep -q '"loggedIn": *true' ` +
-    "&& echo 'Подписка Claude Code подключена. Кнопка выше — войти заново.' " +
-    `|| ${bin} auth login\n`,
+  // `claude-check` команды не печатает: решение принимает НАШ код (см.
+  // `alreadyLoggedIn` ниже), а не однострочник в оболочке.
+  //
+  // ✗ ПЕРВАЯ ВЕРСИЯ ПРОВЕРЯЛА ГРЕПОМ ПРЯМО В ОБОЛОЧКЕ, И ЭТО БЫЛО ВИДНО.
+  // Человек открывал вкладку и первым делом читал `claude auth status
+  // 2>/dev/null | grep -q '"loggedIn": *true' && echo … || claude auth login`
+  // — строку, которая ему ничего не говорит и выглядит как сбой. Оболочка
+  // отражает всё, что в неё печатают, и спрятать это, продолжая печатать,
+  // нельзя. Значит печатать не надо.
+  "claude-check": () => null,
   "claude-login": (bin) => `${bin} auth login\n`,
   system: () => null,
 };
+
+/**
+ * Вошли ли уже по подписке.
+ *
+ * 🔒 СПРАШИВАЕМ ПОЛЕ, А НЕ КОД ВОЗВРАТА. У `claude auth status` код возврата
+ * нулевой в обоих случаях — она печатает JSON и про вошедшего, и про
+ * невошедшего. Единственный честный ответ — поле `loggedIn`.
+ *
+ * `null` — спросить не удалось (CLI нет, ответ не разобрался). Это НЕ «не
+ * вошёл»: разница решает, покажем мы человеку вход или ложное «подключено».
+ */
+function alreadyLoggedIn(bin) {
+  try {
+    const out = spawnSync(bin, ["auth", "status"], {
+      encoding: "utf8",
+      timeout: 15_000,
+    });
+    if (out.status !== 0 || !out.stdout) {
+      return null;
+    }
+    const parsed = JSON.parse(out.stdout);
+    return typeof parsed.loggedIn === "boolean" ? parsed.loggedIn : null;
+  } catch {
+    return null;
+  }
+}
 
 function claudeBin() {
   if (process.env.CLAUDE_BIN) {
@@ -276,7 +304,28 @@ wss.on("connection", (ws) => {
       }
     });
 
-    const command = MODES[mode](bin);
+    // 🔒 ВКЛАДКА ОТКРЫЛАСЬ — РЕШАЕМ ЗДЕСЬ, А НЕ В ОБОЛОЧКЕ. Вошедшему говорим
+    // это словами и оставляем его в покое; невошедшего сразу ведём во вход —
+    // ровно за этим вкладка и существует. Не смогли спросить — говорим правду
+    // о незнании, а не подставляем удобный ответ.
+    let command = MODES[mode](bin);
+    if (mode === "claude-check") {
+      const state = alreadyLoggedIn(bin);
+      if (state === true) {
+        ws.send(
+          "\r\nПодписка Claude Code подключена. " +
+            "Кнопка «Вход по подписке Claude Code» — войти заново.\r\n\r\n"
+        );
+      } else if (state === null) {
+        ws.send(
+          "\r\nСостояние подписки узнать не удалось: " +
+            `${bin} не ответил. Нажмите кнопку входа, чтобы войти вручную.\r\n\r\n`
+        );
+      } else {
+        command = MODES["claude-login"](bin);
+      }
+    }
+
     if (command) {
       // Пауза — чтобы файлы запуска оболочки успели отработать: команда,
       // впечатанная раньше приглашения, теряется целиком.
