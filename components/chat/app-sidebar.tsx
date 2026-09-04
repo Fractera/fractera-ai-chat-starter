@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  GlobeIcon,
   MessageSquareIcon,
   PanelLeftIcon,
+  SlidersHorizontalIcon,
   PenSquareIcon,
   TrashIcon,
 } from "lucide-react";
@@ -45,12 +47,18 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export function AppSidebar({
+  adminHref,
+  siteHref,
   user,
   signOutHref,
 }: {
   user: User | undefined;
   /** Адрес выхода, собранный на сервере по стандарту панели. */
   signOutHref?: string;
+  /** Адрес сайта проекта. Пусто — соседа нет, и кнопки не будет (BACKLOG 96-9). */
+  siteHref?: string;
+  /** Адрес панели управления. Пусто — соседа нет, и кнопки не будет. */
+  adminHref?: string;
 }) {
   const router = useRouter();
   const { setOpenMobile, toggleSidebar } = useSidebar();
@@ -122,6 +130,36 @@ export function AppSidebar({
                 <SidebarTrigger className="text-sidebar-foreground/60 transition-colors duration-150 hover:text-sidebar-foreground" />
               </div>
             </SidebarMenuItem>
+
+            {/* СОСЕДНИЕ СЛУЖБЫ (BACKLOG 96-9, 2026-09-04, просьба владельца).
+                Чат — одна из служб проекта, а не отдельное приложение: из него
+                надо уметь выйти на сайт и в панель, как из панели — сюда.
+
+                🔒 АДРЕС СЧИТАЕТ СЕРВЕР И ПЕРЕДАЁТ ПРОПСОМ: ящик клиентский, и
+                заголовки запроса, из которых выводится хост, ему недоступны.
+
+                🛑 НЕТ АДРЕСА — НЕТ КНОПКИ. Пустая строка это законный ответ на
+                машине без соседей; ссылка в никуда хуже её отсутствия. */}
+            {siteHref ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Сайт проекта">
+                  <a href={siteHref} rel="noopener noreferrer" target="_blank">
+                    <GlobeIcon className="size-4 text-sidebar-foreground/50" />
+                    <span>Сайт проекта</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : null}
+            {adminHref ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Панель управления">
+                  <a href={adminHref} rel="noopener noreferrer" target="_blank">
+                    <SlidersHorizontalIcon className="size-4 text-sidebar-foreground/50" />
+                    <span>Панель управления</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : null}
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>

@@ -7,7 +7,7 @@ import { DataStreamProvider } from "@/components/chat/data-stream-provider";
 import { ChatShell } from "@/components/chat/shell";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ActiveChatProvider } from "@/hooks/use-active-chat";
-import { publicAuthUrl } from "@/lib/fractera/auth-url";
+import { publicAdminUrl, publicAuthUrl, publicSiteUrl } from "@/lib/fractera/auth-url";
 import { auth } from "../(auth)/auth";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -59,11 +59,16 @@ async function SidebarShell({ children }: { children: React.ReactNode }) {
   const back = host ? encodeURIComponent(`${proto}://${host}/`) : "";
   const signOutHref = authUrl && back ? `${authUrl}/logout?redirectUrl=${back}` : "";
 
+  // Соседние службы для ящика (BACKLOG 96-9). Считает сервер — ящик клиентский,
+  // и заголовки запроса ему недоступны.
+  const siteHref = publicSiteUrl(host, proto);
+  const adminHref = publicAdminUrl(host, proto);
+
   const isCollapsed = cookieStore.get("sidebar_state")?.value !== "true";
 
   return (
     <SidebarProvider defaultOpen={!isCollapsed}>
-      <AppSidebar signOutHref={signOutHref} user={session?.user} />
+      <AppSidebar adminHref={adminHref} signOutHref={signOutHref} siteHref={siteHref} user={session?.user} />
       <SidebarInset>
         <Toaster
           position="top-center"
