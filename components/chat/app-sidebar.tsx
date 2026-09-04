@@ -4,8 +4,9 @@ import {
   GlobeIcon,
   MessageSquareIcon,
   PanelLeftIcon,
-  SlidersHorizontalIcon,
   PenSquareIcon,
+  SlidersHorizontalIcon,
+  TerminalIcon,
   TrashIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -49,6 +50,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 export function AppSidebar({
   adminHref,
   siteHref,
+  showTerminal,
   user,
   signOutHref,
 }: {
@@ -59,6 +61,18 @@ export function AppSidebar({
   siteHref?: string;
   /** Адрес панели управления. Пусто — соседа нет, и кнопки не будет. */
   adminHref?: string;
+  /**
+   * Показывать ли вход в терминал (шаг 114-4).
+   *
+   * 🔒 РЕШАЕТ СЕРВЕР, А НЕ ЯЩИК: роль спрашивается у службы входа `:3001`, и
+   * клиенту она не видна. Тот же закон, что у кнопок соседних служб, — «нет
+   * права, нет кнопки», — только здесь вместо адреса признак.
+   *
+   * 🛑 ЭТО НЕ ЗАМОК, А ВЕЖЛИВОСТЬ. Замки стоят на самой странице и на двери
+   * билета; спрятанная кнопка никого не останавливает и останавливать не
+   * должна — иначе следующий агент решит, что права проверяются здесь.
+   */
+  showTerminal?: boolean;
 }) {
   const router = useRouter();
   const { setOpenMobile, toggleSidebar } = useSidebar();
@@ -176,6 +190,20 @@ export function AppSidebar({
                     <span className="font-medium">New chat</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                {showTerminal ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      className="rounded-lg text-sidebar-foreground/70 transition-colors duration-150 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                      tooltip="Терминал"
+                    >
+                      <Link href="/terminal" onClick={closeMobile}>
+                        <TerminalIcon className="size-4" />
+                        <span className="text-[13px]">Терминал</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
                 {user ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -194,7 +222,9 @@ export function AppSidebar({
           <SidebarHistory user={user} />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border pt-2 pb-3">
-          {user ? <SidebarUserNav signOutHref={signOutHref} user={user} /> : null}
+          {user ? (
+            <SidebarUserNav signOutHref={signOutHref} user={user} />
+          ) : null}
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>

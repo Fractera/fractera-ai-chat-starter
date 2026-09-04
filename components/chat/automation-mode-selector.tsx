@@ -1,10 +1,9 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
-import useSWR, { mutate } from "swr";
-import { toast } from "sonner";
 import { BotIcon, SparklesIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { memo, useCallback, useState } from "react";
+import { toast } from "sonner";
+import useSWR, { mutate } from "swr";
 import {
   ModelSelector,
   ModelSelectorContent,
@@ -14,6 +13,7 @@ import {
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
+import { Button } from "@/components/ui/button";
 import type { AutomationMode } from "@/lib/fractera/automation-mode";
 
 // ПЕРЕКЛЮЧАТЕЛЬ СТРАТЕГИИ АВТОМАТИЗАЦИИ В ПОЛЕ ВВОДА (112-2, 2026-09-04).
@@ -45,15 +45,24 @@ type ModeDescriptor = {
   icon: typeof BotIcon;
 };
 
-// 🔒 ИМЯ ПРОДУКТА — «Claude Agent SDK». Поправка владельца 2026-09-04 («Cloud
-// Agent SDK incorrect») и правила бренда первоисточника: «Claude Agent»
-// разрешено, «Claude Code» в названии чужого продукта — нет.
+// 🪦 ИМЯ РЕЖИМА ПЕРЕПИСАНО ШАГОМ 114-4. Здесь стоял «Claude Agent SDK» — тот
+// самый инструмент, который шаг 113 построил, а 114 отменил целиком: подписка
+// ему недоступна по правилам самого Anthropic. Автоматический режим теперь
+// опирается на официальный CLI Claude Code на сервере владельца.
+//
+// 🔒 ПРАВИЛА БРЕНДА ПЕРВОИСТОЧНИКА СОБЛЮДЕНЫ И ЗДЕСЬ: «Claude Code» запрещено в
+// НАЗВАНИИ чужого продукта, и режим так не назван — он назван по тому, что
+// делает. Упоминание CLI в подсказке — констатация факта об инструменте, а не
+// присвоение имени.
+//
+// 🔒 КЛЮЧ ОСТАЁТСЯ `claude`: он записан в PLATFORM-CONFIG живых серверов, и его
+// переименование — миграция, а не текст.
 const MODES: ModeDescriptor[] = [
   {
-    hint: "Навыки и MCP, алгоритмы Anthropic",
+    hint: "Claude Code на сервере, вход вашей подпиской во вкладке «Терминал»",
     icon: SparklesIcon,
     id: "claude",
-    name: "Claude Agent SDK",
+    name: "Агент Anthropic по подписке",
   },
   {
     hint: "Свой конвейер: дешёвые и дорогие модели по местам",

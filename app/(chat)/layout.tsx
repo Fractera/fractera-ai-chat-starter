@@ -7,7 +7,12 @@ import { DataStreamProvider } from "@/components/chat/data-stream-provider";
 import { ChatShell } from "@/components/chat/shell";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ActiveChatProvider } from "@/hooks/use-active-chat";
-import { publicAdminUrl, publicAuthUrl, publicSiteUrl } from "@/lib/fractera/auth-url";
+import {
+  publicAdminUrl,
+  publicAuthUrl,
+  publicSiteUrl,
+} from "@/lib/fractera/auth-url";
+import { fracteraRoles } from "@/lib/fractera/session";
 import { auth } from "../(auth)/auth";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -27,7 +32,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 }
 
 async function SidebarShell({ children }: { children: React.ReactNode }) {
-  const [session, cookieStore, h] = await Promise.all([auth(), cookies(), headers()]);
+  const [session, cookieStore, h] = await Promise.all([
+    auth(),
+    cookies(),
+    headers(),
+  ]);
 
   // 🔒 АДРЕСА ВХОДА И ВЫХОДА СОБИРАЮТСЯ ЗДЕСЬ, ПО СТАНДАРТУ ПАНЕЛИ (:3002).
   // Дословно оттуда: слой авторизации живёт на другом источнике и НЕ МОЖЕТ
@@ -57,18 +66,35 @@ async function SidebarShell({ children }: { children: React.ReactNode }) {
   // страница-заглушка `/welcome`: она существует без авторизации, и поэтому
   // менять стандарт ссылки не понадобилось.
   const back = host ? encodeURIComponent(`${proto}://${host}/`) : "";
-  const signOutHref = authUrl && back ? `${authUrl}/logout?redirectUrl=${back}` : "";
+  const signOutHref =
+    authUrl && back ? `${authUrl}/logout?redirectUrl=${back}` : "";
 
   // Соседние службы для ящика (BACKLOG 96-9). Считает сервер — ящик клиентский,
   // и заголовки запроса ему недоступны.
   const siteHref = publicSiteUrl(host, proto);
   const adminHref = publicAdminUrl(host, proto);
 
+  // Вход в терминал показывается только архитектору (шаг 114-4).
+  //
+  // 🔒 РОЛЬ СПРАШИВАЕТСЯ У СЛУЖБЫ ВХОДА, А НЕ ВЫВОДИТСЯ ИЗ `session` NextAuth:
+  // `auth()` знает строку в базе чата, а права живут у `:3001` — тот же закон,
+  // которым чат не держит своей копии роли (`lib/fractera/session.ts`).
+  //
+  // 🛑 ЭТО ВЕЖЛИВОСТЬ, А НЕ ЗАМОК. Замки стоят на странице `/terminal` и на
+  // двери билета; скрытая кнопка никого не останавливает.
+  const showTerminal = (await fracteraRoles()).includes("architect");
+
   const isCollapsed = cookieStore.get("sidebar_state")?.value !== "true";
 
   return (
     <SidebarProvider defaultOpen={!isCollapsed}>
-      <AppSidebar adminHref={adminHref} signOutHref={signOutHref} siteHref={siteHref} user={session?.user} />
+      <AppSidebar
+        adminHref={adminHref}
+        showTerminal={showTerminal}
+        signOutHref={signOutHref}
+        siteHref={siteHref}
+        user={session?.user}
+      />
       <SidebarInset>
         <Toaster
           position="top-center"
