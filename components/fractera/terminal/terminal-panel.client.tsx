@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  ArrowLeftIcon,
-  KeyRoundIcon,
-  RotateCcwIcon,
-  SparklesIcon,
-  TerminalIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, KeyRoundIcon, RotateCcwIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AuthFlowModal } from "@/components/fractera/terminal/auth-flow-modal.client";
@@ -16,7 +10,6 @@ import {
 } from "@/components/fractera/terminal/xterm-terminal.client";
 import { Button } from "@/components/ui/button";
 import { extractAuthUrl } from "@/lib/fractera/terminal-auth.mjs";
-import { cn } from "@/lib/utils";
 
 // ПАНЕЛЬ ТЕРМИНАЛА — ВЫЖИМКА ИЗ `coding-window-shell.client.tsx` (шаг 114-4).
 //
@@ -73,72 +66,11 @@ const RESTORE_MODES = [
   .map((mode) => `${ESC}[${mode}`)
   .join("");
 
-type Mode = "claude-code" | "claude-login" | "system";
+type Mode = "claude-check" | "claude-login" | "system";
 
 type Status = "closed" | "connected" | "connecting" | "idle";
 
-const MODES: {
-  hint: string;
-  icon: typeof TerminalIcon;
-  id: Mode;
-  label: string;
-}[] = [
-  {
-    hint: "Голая оболочка в рабочей папке агента",
-    icon: TerminalIcon,
-    id: "system",
-    label: "Оболочка",
-  },
-  {
-    hint: "Запустить claude auth login и войти своей подпиской",
-    icon: KeyRoundIcon,
-    id: "claude-login",
-    label: "Вход по подписке",
-  },
-  {
-    hint: "Запустить Claude Code",
-    icon: SparklesIcon,
-    id: "claude-code",
-    label: "Claude Code",
-  },
-];
-
-/**
- * Кнопка режима отдельным компонентом, а не стрелкой в пропсе: правило
- * `noJsxPropsBind` действует не из вкусовщины — новая функция на каждый рендер
- * ломает мемоизацию у всего, что ниже. Заодно тут видно, что «активный» — это
- * подсветка, а не состояние соединения.
- */
-function ModeButton({
-  active,
-  mode,
-  onPick,
-}: {
-  active: boolean;
-  mode: (typeof MODES)[number];
-  onPick: (id: Mode) => void;
-}) {
-  const handleClick = useCallback(() => {
-    onPick(mode.id);
-  }, [mode.id, onPick]);
-
-  const Icon = mode.icon;
-  return (
-    <Button
-      className={cn(active && "bg-white/10")}
-      onClick={handleClick}
-      size="sm"
-      title={mode.hint}
-      variant="ghost"
-    >
-      <Icon size={14} />
-      {mode.label}
-    </Button>
-  );
-}
-
 export function TerminalPanel() {
-  const [mode, setMode] = useState<Mode>("system");
   const [status, setStatus] = useState<Status>("idle");
   const [note, setNote] = useState("");
   const [authUrl, setAuthUrl] = useState<string | null>(null);
@@ -249,8 +181,11 @@ export function TerminalPanel() {
     [scan]
   );
 
+  // 🔒 ОТКРЫТИЕ ВКЛАДКИ ВХОДИТ ТОЛЬКО ЕСЛИ НАДО. `claude auth login` не умеет
+  // спрашивать, вошли ли уже (измерено 114-8: начинает обмен безусловно), и
+  // вкладка, просящая вход у давно вошедшего, читается как «вход не сохранился».
   useEffect(() => {
-    connect("system");
+    connect("claude-check");
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
@@ -274,13 +209,12 @@ export function TerminalPanel() {
     [send]
   );
 
-  const handleMode = useCallback(
-    (next: Mode) => {
-      setMode(next);
-      connect(next);
-    },
-    [connect]
-  );
+  // 🔒 КНОПКА ВХОДИТ ВСЕГДА, В ОТЛИЧИЕ ОТ ОТКРЫТИЯ ВКЛАДКИ. Вошедшему она нужна
+  // ровно затем, зачем нажимают такую кнопку: сменить учётную запись или
+  // переделать вход, который он считает испорченным.
+  const handleLogin = useCallback(() => {
+    connect("claude-login");
+  }, [connect]);
 
   // 🔒 РУЧНОЙ СБРОС — НЕ ЛИШНЯЯ КНОПКА, А ПРИЗНАНИЕ ГРАНИЦЫ. Два слоя выше
   // лечат случаи, которые мы УМЕЕМ заметить: смену режима и обрыв сокета.
@@ -316,16 +250,18 @@ export function TerminalPanel() {
           </Link>
         </Button>
 
-        <div className="flex flex-wrap gap-1">
-          {MODES.map((m) => (
-            <ModeButton
-              active={mode === m.id}
-              key={m.id}
-              mode={m}
-              onPick={handleMode}
-            />
-          ))}
-        </div>
+        {/* 🔒 ОДНА КНОПКА — РЕШЕНИЕ ВЛАДЕЛЬЦА (114-8). «Оболочка» и «Claude Code»
+            убраны: вкладка существует ради одного — подключить подписку. Оболочка
+            под ней та же самая, и набрать в ней `claude` по-прежнему можно. */}
+        <Button
+          onClick={handleLogin}
+          size="sm"
+          title="Запустить вход заново: claude auth login"
+          variant="ghost"
+        >
+          <KeyRoundIcon size={14} />
+          Вход по подписке Claude Code
+        </Button>
 
         <Button
           className="ml-auto"
