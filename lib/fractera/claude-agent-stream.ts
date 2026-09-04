@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { UIMessageStreamWriter } from "ai";
 import type { ChatMessage } from "@/lib/types";
 import { generateUUID } from "@/lib/utils";
 import { askClaudeAgent } from "@/lib/fractera/claude-agent";
@@ -18,9 +19,13 @@ import { askClaudeAgent } from "@/lib/fractera/claude-agent";
 // заменить по частям — а заменить придётся: инструменты и навыки меняют именно
 // первый файл.
 
-type StreamWriter = {
-  write: (part: { data?: unknown; delta?: string; id?: string; transient?: boolean; type: string }) => void;
-};
+// 🔒 ТИП ПИСАТЕЛЯ БЕРЁТСЯ У БИБЛИОТЕКИ, А НЕ ОПИСЫВАЕТСЯ СВОЙ.
+// ✗ Оплачено сборкой на сервере 2026-09-04: свой «достаточно похожий» тип
+// (`{ write: (part: {...}) => void }`) компилятор не принял — у настоящего
+// писателя параметр строже, и структурная совместимость здесь не работает.
+// Свой тип рядом с чужим — это ещё и вторая правда о контракте: библиотека
+// поменяет свой, а наш останется прежним и разойдётся молча.
+type StreamWriter = UIMessageStreamWriter<ChatMessage>;
 
 /**
  * Текст последнего вопроса человека.
