@@ -20,6 +20,14 @@ import "@xterm/xterm/css/xterm.css";
 
 export type XtermHandle = {
   focus: () => void;
+  /**
+   * Полный сброс (RIS). Возвращает ВСЕ режимы DEC в исходное — слежение за
+   * мышью, дополнительный экран, скобочную вставку, видимость курсора — и
+   * очищает ленту. Зовётся при открытии новой сессии: PTY у неё новый, а
+   * терминал в браузере тот же самый, и его состояние иначе переезжает из
+   * прошлой сессии (114-7).
+   */
+  reset: () => void;
   write: (data: string) => void;
 };
 
@@ -44,6 +52,7 @@ export function XtermTerminal({ onData, onResize, ref }: Props) {
 
   useImperativeHandle(ref, () => ({
     focus: () => termRef.current?.focus(),
+    reset: () => termRef.current?.reset(),
     write: (data: string) => termRef.current?.write(data),
   }));
 
