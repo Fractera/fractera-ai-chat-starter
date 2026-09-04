@@ -63,8 +63,31 @@ export function agentModel(): string {
 export type AgentChunk =
   | { type: "text"; text: string }
   | { type: "tool"; name: string }
+  | { type: "retry"; attempt: number; status: number | null }
   | { type: "done"; subtype: string }
   | { type: "error"; message: string };
+
+/**
+ * Сколько ждать ответа, прежде чем оборвать.
+ *
+ * ✗ ЭТО ЧИСЛО ОПЛАЧЕНО ЖИВЫМ ЗАМЕРОМ 2026-09-04, А НЕ ВЫБРАНО ИЗ ОСТОРОЖНОСТИ.
+ * С заведомо неверным ключом SDK НЕ ОТКАЗЫВАЕТ: он уходит в повторы с растущей
+ * паузой — 2с, 3с, 4с, 7с, 11с, 22с, 42с, 75с… — и за 150 секунд не отдал ни
+ * ошибки, ни результата. Без срока чат висел бы вечно, показывая «ожидание»:
+ * **отказ выглядел бы как задумчивость.**
+ */
+const DEADLINE_MS = Number(process.env.FRACTERA_AGENT_DEADLINE_MS || 60_000);
+
+/**
+ * Ошибки, которые повторять бессмысленно.
+ *
+ * 🔒 ПОВТОР ЛЕЧИТ ПЕРЕГРУЗКУ И СЕТЬ, И НИКОГДА НЕ ЛЕЧИТ ПРАВА. `401` и `403`
+ * означают, что ключ не тот; десятый повтор даст тот же ответ, что первый, — и
+ * всё это время человек будет ждать. Обрываем сразу и называем причину.
+ */
+function isFatalStatus(status: number | null): boolean {
+  return status === 401 || status === 403;
+}
 
 /**
  * Один вопрос агенту — поток кусков, годный для ленты чата.
@@ -119,9 +142,22 @@ export async function* askClaudeAgent({
 
   const model = agentModel();
 
+  // 🔒 ПРЕРЫВАТЕЛЬ ПЕРЕДАЁТСЯ САМОМУ SDK, А НЕ ИМИТИРУЕТСЯ ВЫХОДОМ ИЗ ЦИКЛА.
+  // Дословно из типов установленной версии: «Controller for cancelling the query.
+  // When aborted, the query will stop and clean up resources». Выйдя из цикла без
+  // него, мы оставили бы подпроцесс живым — и на сервере копились бы сироты, тот
+  // же класс, что уже оплачен портами и pm2.
+  const controller = new AbortController();
+  const onOuterAbort = () => controller.abort();
+  signal?.addEventListener("abort", onOuterAbort);
+  const deadline = setTimeout(() => controller.abort(), DEADLINE_MS);
+
+  let fatal: string | null = null;
+
   try {
     for await (const message of query({
       options: {
+        abortController: controller,
         // 🔒 ПУСТОЙ СПИСОК — ЭТО И ЕСТЬ РЕШЕНИЕ. См. закон в шапке файла.
         allowedTools: [],
         cwd,
@@ -144,11 +180,36 @@ export async function* askClaudeAgent({
             yield { name: block.name, type: "tool" };
           }
         }
+      } else if (message.type === "system" && message.subtype === "api_retry") {
+        // 🔒 ПОВТОР ПОКАЗЫВАЕТСЯ ЧЕЛОВЕКУ, А НЕ ПРЯЧЕТСЯ В ЛОГ. Молчащее ожидание
+        // в сорок секунд неотличимо от зависшего чата.
+        yield { attempt: message.attempt, status: message.error_status, type: "retry" };
+        if (isFatalStatus(message.error_status)) {
+          fatal =
+            message.error_status === 401
+              ? "Anthropic не принял ключ (401). Проверьте его на экране бота: «Настройки» → «Ключ Anthropic» → «Проверить»."
+              : "Anthropic отказал в доступе (403). Ключ есть, но прав у него нет.";
+          controller.abort();
+          break;
+        }
       } else if (message.type === "result") {
         yield { subtype: message.subtype, type: "done" };
       }
     }
   } catch (e) {
-    yield { message: String(e), type: "error" };
+    // 🔒 ОБРЫВ ПО СРОКУ — НЕ «ОШИБКА SDK», И НАЗЫВАТЬ ЕГО НАДО СВОИМ ИМЕНЕМ.
+    // Иначе человек пойдёт чинить ключ, который в порядке, или наоборот.
+    if (fatal === null) {
+      fatal = controller.signal.aborted
+        ? `Anthropic не ответил за ${Math.round(DEADLINE_MS / 1000)} с — обрываю. Так выглядит и неверный ключ, и перегрузка на их стороне; кнопка «Проверить» на карточке ключа отвечает быстро и точно.`
+        : String(e);
+    }
+  } finally {
+    clearTimeout(deadline);
+    signal?.removeEventListener("abort", onOuterAbort);
+  }
+
+  if (fatal !== null) {
+    yield { message: fatal, type: "error" };
   }
 }

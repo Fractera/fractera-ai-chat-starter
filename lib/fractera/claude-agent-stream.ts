@@ -110,6 +110,21 @@ export async function streamClaudeAgent({
       // и человек увидит это в ленте, а не только в логе сервера.
       open();
       dataStream.write({ delta: `\n\n_инструмент: ${chunk.name}_\n\n`, id: textId, type: "text-delta" });
+    } else if (chunk.type === "retry") {
+      // 🔒 ОЖИДАНИЕ ПОКАЗЫВАЕТСЯ, ПОКА ОНО ИДЁТ. Замер 2026-09-04: пауза между
+      // повторами растёт до десятков секунд, и молчащий экран в это время
+      // неотличим от зависшего. Статус `transient` — он не оседает в истории
+      // разговора, потому что это не часть ответа.
+      dataStream.write({
+        data: {
+          message: `Anthropic не отвечает, повтор ${chunk.attempt}${chunk.status ? ` (HTTP ${chunk.status})` : ""}…`,
+          modelId: "claude-agent",
+          modelName: "Claude Agent SDK",
+          phase: "still-waiting",
+        },
+        transient: true,
+        type: "data-waiting-status",
+      });
     } else if (chunk.type === "error") {
       failed = chunk.message;
     }
