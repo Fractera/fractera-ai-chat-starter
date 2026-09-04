@@ -20,8 +20,6 @@ import {
   textOf,
 } from "@/lib/fractera/answer";
 import { inlineAttachmentsForModel } from "@/lib/fractera/media";
-import { currentAutomationMode } from "@/lib/fractera/automation-mode";
-import { lastUserText, streamClaudeAgent } from "@/lib/fractera/claude-agent-stream";
 import { chatUiOf } from "@/lib/fractera/i18n";
 import { auth } from "@/app/(auth)/auth";
 import {
@@ -336,28 +334,6 @@ export async function POST(request: Request) {
           id: "model-answer",
           type: "data-parse-step",
         });
-
-        // ── РАЗВИЛКА ДВУХ СТРАТЕГИЙ АВТОМАТИЗАЦИИ (113-3, 2026-09-04) ──────
-        //
-        // 🔒 РАЗВИЛКА СТОИТ ЗДЕСЬ, ВНУТРИ УЖЕ ОТКРЫТОГО ПОТОКА, А НЕ ВЫШЕ. Всё,
-        // что было до неё — сохранение сообщения, зеркало в Telegram, заголовок
-        // разговора, — принадлежит ЧАТУ, а не модели, и обязано случиться в обоих
-        // режимах. Подними развилку выше, и второй режим начал бы терять историю.
-        //
-        // 🛑 СЕГОДНЯ РЕЖИМ ЧИТАЕТСЯ, НО ИНСТРУМЕНТОВ У АГЕНТА НЕТ — см. закон в
-        // `lib/fractera/claude-agent.ts`. Это первый ответ по новому пути, а не
-        // полный замысел: навыки и MCP, ради которых заведена рабочая папка,
-        // строятся следующим шагом.
-        if (currentAutomationMode() === "claude") {
-          await streamClaudeAgent({
-            dataStream,
-            markModelActive,
-            prompt: lastUserText(uiMessages),
-            signal: request.signal,
-            stopWaitingStatus,
-          });
-          return;
-        }
 
         const result = streamText({
           activeTools:
