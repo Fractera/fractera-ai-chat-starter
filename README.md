@@ -5,7 +5,7 @@ is a conversation with the project itself — same account, same files, same ser
 
 It runs as the eighth service of a Fractera deployment: `chat.<your-domain>`, port `3600`, installed
 automatically when your server is born. You do not deploy this repository yourself — Fractera clones
-it onto your machine. See it live at **[chat.aifa.dev](https://chat.aifa.dev)** (sign-in required).
+it onto your machine.
 
 ---
 
