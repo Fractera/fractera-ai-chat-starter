@@ -273,8 +273,7 @@ export function TerminalPanel() {
   // политике путей плагин в Telegram не пересылает, и 2026-09-05 такой вопрос
   // держал бота молчащим два часа — нажать клавишу было некому. Теперь есть кому.
   const handleAttachAgent = useCallback(() => {
-    send({ data: "tmux attach -t fractera-agent
-", type: "stdin" });
+    send({ data: "tmux attach -t fractera-agent\n", type: "stdin" });
     termRef.current?.focus();
   }, [send]);
 
