@@ -69,6 +69,61 @@ say "CLI агента"
 npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
 command -v claude > /dev/null 2>&1 || say "ВНИМАНИЕ: claude не установлен — канал не поднимется"
 
+# ── плагин каналов Telegram ──────────────────────────────────────────────────
+#
+# 🔒 БЕЗ ПЛАГИНА КАНАЛ НЕ СУЩЕСТВУЕТ — И ДО ЭТОГО ШАГА ЕГО НЕ СТАВИЛ НИКТО.
+# ✗ Измерено 2026-09-05: `grep` по всему `bootstrap.sh` не находит ни
+# `claude-plugins-official`, ни `channels/telegram`, ни `enabledPlugins`. Плагин
+# жил на одной машине, поставленный руками; следующий сервер родился бы с тремя
+# работающими процессами и молчащим ботом — отказ, неотличимый от поломки.
+#
+# 🔒 `-y` ОБЯЗАТЕЛЕН, И ЭТО НЕ УДОБСТВО. Установка спрашивает подтверждение, а мы
+# исполняемся без терминала: без флага команда встала бы, как встал агент на
+# вопросе о доверии часом раньше. Тот же закон, тот же день, третий случай.
+#
+# 🛑 `fakechat` НЕ СТАВИТСЯ И НЕ ВКЛЮЧАЕТСЯ. Решение владельца 2026-09-05:
+# «delete it». Чужой плагин, который никто осознанно не включал; ✗ его отказ
+# ломал первый поиск инструментов, и агент топтался в Bash вместо вызова intake.
+say "рынок плагинов"
+claude plugin marketplace add anthropics/claude-plugins-official > /dev/null 2>&1 \
+  && say "+ claude-plugins-official" || say "  рынок уже добавлен"
+
+say "плагин telegram"
+claude plugin install telegram@claude-plugins-official -y --scope user > /dev/null 2>&1 \
+  && say "+ telegram установлен" || say "  telegram уже установлен"
+
+# 🔒 ВКЛЮЧЕНИЕ ПРОВЕРЯЕТСЯ ОТДЕЛЬНО ОТ УСТАНОВКИ: поставленный и выключенный
+# плагин выглядит одинаково в `plugin list`, а канала не даёт.
+python3 - <<'PYEOF' || say "ВНИМАНИЕ: enabledPlugins не проставлен"
+import json, os
+p = "/root/.claude/settings.json"
+s = json.load(open(p)) if os.path.exists(p) else {}
+ep = s.setdefault("enabledPlugins", {})
+ep["telegram@claude-plugins-official"] = True
+ep.pop("fakechat@claude-plugins-official", None)
+s.setdefault("extraKnownMarketplaces", {}).setdefault(
+    "claude-plugins-official",
+    {"source": {"source": "github", "repo": "anthropics/claude-plugins-official"}},
+)
+json.dump(s, open(p, "w"), indent=2, ensure_ascii=False)
+print("[telegrambot] + telegram включён, fakechat снят")
+PYEOF
+
+# ── чего установщик ДАТЬ НЕ МОЖЕТ, и это говорится вслух ─────────────────────
+#
+# 🛑 ДВЕ ВЕЩИ ОСТАЮТСЯ ЗА ЧЕЛОВЕКОМ ПО ПРИРОДЕ, А НЕ ПО НЕДОДЕЛКЕ: вход в Claude
+# по подписке (это личный аккаунт владельца) и токен бота с allowlist (его
+# секрет). Молчащий бот без них неотличим от поломки — поэтому установщик
+# обязан назвать их сам, а не оставить человека гадать.
+MISSING=""
+[ -f /root/.claude/.credentials.json ] || MISSING="${MISSING}вход по подписке (вкладка «Терминал» → режим входа) · "
+[ -f /root/.claude/channels/telegram/.env ] || MISSING="${MISSING}токен бота (привязка в Telegram) · "
+if [ -n "$MISSING" ]; then
+  say "🛑 БОТ ОТВЕЧАТЬ НЕ БУДЕТ, ПОКА НЕ СДЕЛАНО РУКАМИ: ${MISSING%· }"
+else
+  say "вход и токен на месте"
+fi
+
 # ── процесс агента канала ────────────────────────────────────────────────────
 #
 # 🔒 ЭТО ПЕРВОЕ МЕСТО В ПРОЕКТЕ, ГДЕ ОН ВООБЩЕ ЗАПУСКАЕТСЯ. `agent-reset.sh` и
