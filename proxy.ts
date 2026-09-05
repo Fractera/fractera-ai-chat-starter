@@ -102,7 +102,28 @@ export async function proxy(request: NextRequest) {
   // Вошедшему незачем видеть формы входа шаблона и заглушку: единственная точка
   // входа — служба, и её страницы живут по другому адресу.
   if (["/login", "/register", "/welcome"].includes(pathname)) {
-    return NextResponse.redirect(`${publicOrigin(request)}/`);
+    return NextResponse.redirect(`${publicOrigin(request)}/terminal`);
+  }
+
+  // 🔒 КОРЕНЬ СЛУЖБЫ ВЕДЁТ В ТЕРМИНАЛ АГЕНТА, А НЕ В ЛЕНТУ ЧАТА (124,
+  // 2026-09-05). Решение владельца: «наша задача убрать полностью ai sdk из
+  // этого проекта». Путь к ИИ один — Telegram → Claude Code; лента в нём не
+  // участвует, а служба `:3600` нужна ради терминала подписки, двери канала,
+  // медиатеки и расшифровки голоса.
+  //
+  // ✗ ПОЧЕМУ ЗДЕСЬ, А НЕ В САМОЙ СТРАНИЦЕ, И ЭТО ОПЛАЧЕНО УПАВШЕЙ СБОРКОЙ.
+  // `redirect()` в `page.tsx` при включённом `cacheComponents` уезжает внутрь
+  // частичного предрендеривания: ответ `200`, заголовок `x-nextjs-postponed: 1`,
+  // оболочка чата статикой, переадресация уже в браузере — то есть человек
+  // видит ровно тот экран, от которого уходит, а без JavaScript не уходит вовсе.
+  // Попытка вылечить это `export const dynamic = "force-dynamic"` УРОНИЛА
+  // СБОРКУ: «Route segment config "dynamic" is not compatible with
+  // nextConfig.cacheComponents». Запрет был записан в двери `agent-setup` и
+  // прочитан мной за час до нарушения.
+  // 🔒 ЗДЕСЬ ЖЕ ПЕРЕАДРЕСАЦИЯ СЛУЧАЕТСЯ ДО ЕДИНОГО БАЙТА РАЗМЕТКИ и работает
+  // без JavaScript — тем же приёмом, что три соседние выше.
+  if (pathname === "/") {
+    return NextResponse.redirect(`${publicOrigin(request)}/terminal`);
   }
 
   return NextResponse.next();
