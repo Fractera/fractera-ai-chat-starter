@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftIcon, KeyRoundIcon, RotateCcwIcon } from "lucide-react";
+import { ArrowLeftIcon, BotIcon, KeyRoundIcon, RotateCcwIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentSetupModal } from "@/components/fractera/terminal/agent-setup-modal.client";
@@ -256,6 +256,28 @@ export function TerminalPanel() {
   // Программа внутри живого PTY способна испортить состояние терминала и не
   // умереть при этом, и заметить такое из браузера нечем. Тогда человеку нужна
   // не догадка агента, а кнопка.
+  // 🔒 ПОДКЛЮЧЕНИЕ К ЖИВОЙ СЕССИИ АГЕНТА, А НЕ ЗАПУСК ВТОРОЙ (119).
+  //
+  // ✗ ЧЕМ ОПЛАЧЕНО. Владелец: «когда я открываю терминал, я не вижу никаких
+  // зависших сообщений, почему мой терминал пуст? На первом тестировании каждое
+  // моё сообщение отображалось в терминале». Он был прав: в первом испытании он
+  // ЗАПУСКАЛ канал в этой самой вкладке — вкладка и БЫЛА сессией. Уведя канал под
+  // pm2, мы получили живучесть и потеряли видимость, и цену тогда не назвали.
+  //
+  // 🔒 КНОПКА ПОДКЛЮЧАЕТ, А НЕ ЗАПУСКАЕТ. Набрать здесь `claude --channels` значило
+  // бы завести ВТОРОГО опрашивателя того же бота, а Telegram отдаёт каждое
+  // обновление ровно одному читателю: переписка владельца поделилась бы пополам,
+  // молча. `tmux attach` показывает ТОТ ЖЕ экран, что живёт под pm2.
+  //
+  // 🔒 И ЭТО ЖЕ ЕДИНСТВЕННЫЙ СПОСОБ ОТВЕТИТЬ НА МОДАЛЬНЫЙ ВОПРОС CLI: вопрос о
+  // политике путей плагин в Telegram не пересылает, и 2026-09-05 такой вопрос
+  // держал бота молчащим два часа — нажать клавишу было некому. Теперь есть кому.
+  const handleAttachAgent = useCallback(() => {
+    send({ data: "tmux attach -t fractera-agent
+", type: "stdin" });
+    termRef.current?.focus();
+  }, [send]);
+
   const handleReset = useCallback(() => {
     termRef.current?.reset();
     termRef.current?.focus();
@@ -297,6 +319,16 @@ export function TerminalPanel() {
           <KeyRoundIcon size={14} />
           Вход по подписке Claude Code
         </Button>
+        <Button
+          onClick={handleAttachAgent}
+          size="sm"
+          title="Показать живую сессию агента: тот же экран, что работает под pm2. Отключиться — Ctrl+B, затем D"
+          variant="ghost"
+        >
+          <BotIcon size={14} />
+          Сессия агента
+        </Button>
+
 
         <Button
           className="ml-auto"
