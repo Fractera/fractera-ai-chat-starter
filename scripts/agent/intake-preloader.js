@@ -143,6 +143,15 @@ async function runIntake(a) {
 
 // ---------- MCP по stdio: построчный JSON-RPC ----------
 
+// 🔒 СЧЁТЧИК ЖИВЫХ ВЫЗОВОВ — НЕ УКРАШЕНИЕ, А ЗАЩИТА ОТ ОБОРВАННОГО ПРИЁМА.
+// ✗ измерено 2026-09-05: сервер выходил по закрытию stdin немедленно, и разбор,
+// шедший в этот момент, обрывался на середине — файл уже лёг в медиатеку, а
+// текст не вернулся никому. Разбор изображения идёт десятки секунд, и закрытие
+// входа в эту секунду — обычное дело, а не редкость.
+let inFlight = 0;
+let stdinClosed = false;
+function maybeExit() { if (stdinClosed && inFlight === 0) process.exit(0); }
+
 function send(msg) { process.stdout.write(JSON.stringify(msg) + '\n'); }
 function ok(id, result) { send({ jsonrpc: '2.0', id, result }); }
 function fail(id, message) { send({ jsonrpc: '2.0', id, error: { code: -32603, message } }); }
