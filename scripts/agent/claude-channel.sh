@@ -56,6 +56,17 @@ fi
 # Наследие правки 119: сессия tmux, пережившая переезд, была бы вторым опрашивателем.
 tmux kill-session -t "$SESSION" 2>/dev/null
 screen -S "$SESSION" -X quit 2>/dev/null
+# 🔒 МЁРТВЫЕ СОКЕТЫ УБИРАЮТСЯ ПРИ КАЖДОМ СТАРТЕ, А НЕ КОГДА ЗАМЕТЯТ. `quit` не
+# всегда снимает сокет за собой, и после нескольких перезапусков `screen -ls`
+# показывает список из «Dead ???» вперемешку с живой. ✗ измерено 2026-09-05:
+# человек, читающий этот список, не отличит живую сессию от мусора — а
+# `screen -r` без имени откажется подключаться, пока их несколько.
+screen -wipe > /dev/null 2>&1
 
 cd /opt/fractera/agent-workspace || exit 1
+# 🔒 МЕНЮ БОТА СТАВИТСЯ ПОСЛЕ ПЛАГИНА, А НЕ ДО (126). Плагин объявляет своё меню
+# при старте канала; наш вызов обязан прийти следом, иначе его затрут. Отвязанный
+# фоновый процесс — потому что ниже `exec`, и эта строка иначе не выполнится.
+setsid nohup bash -c 'sleep 25; /opt/fractera/agent-commands.sh' > /dev/null 2>&1 < /dev/null &
+
 exec screen -DmS "$SESSION" claude --channels plugin:telegram@claude-plugins-official --add-dir /root/.claude/channels/telegram $MODEL_ARG
