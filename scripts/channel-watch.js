@@ -152,12 +152,75 @@ function safeSize(f) { try { return fs.statSync(f).size; } catch (e) { return 0;
 let state = null;
 let timer = null;
 
+// ---------- слова: два языка, и это НЕ генерация ----------
+//
+// 🔒 ЭТИ ТЕКСТЫ ГОТОВЫЕ, А НЕ ПОРОЖДЁННЫЕ МОДЕЛЬЮ, И ЭТО ВАЖНО ЗНАТЬ.
+// Вопрос владельца 2026-09-05: «фиксированные тексты, которые ты мне отправляешь,
+// они генерируются или лежат готовые?» — лежат готовые, здесь. Сторож обязан
+// сказать про исчерпанный лимит именно тогда, когда модель НЕ отвечает; текст,
+// который надо у кого-то попросить, в этот момент попросить не у кого.
+//
+// 🔒 ЯЗЫК — НАСТРОЙКА, А НЕ УГАДЫВАНИЕ. `language_code` собеседника Telegram
+// отдаёт только вместе с сообщением, а сторож пишет САМ, без входящего письма.
+// Значит язык берётся из файла; умолчание — русский, потому что владелец русский.
+//
+// 🛑 ДВА ЯЗЫКА, А НЕ 82, И ЭТО РЕШЕНИЕ ВЛАДЕЛЬЦА: «сейчас достаточно русский
+// английский». Место под третий стоит: добавить ключ в оба словаря.
+const LANG_FILE = '/opt/fractera/agent-lang';
+
+const WORDS = {
+  ru: {
+    fiveHour: 'пятичасовое окно',
+    weekly: 'недельное окно',
+    limit: 'лимит',
+    resetTitle: '✅ Лимиты сброшены.',
+    resetBody: 'Claude Code снова отвечает — можете продолжать.',
+    resetLate: '(напоминание с опозданием: сторож был перезапущен)',
+    hitTitle: '⛔ Лимит подписки исчерпан.',
+    hitBody: (w) => 'Claude Code не обработал ваше сообщение — упёрся в ' + w + '.',
+    hitWhen: (t, m) => 'Сброс: ' + t + ' (через ' + m + ' мин).',
+    hitPromise: 'Напомню, когда лимиты сбросятся.',
+    deadFixed: '♻️ Бот перестал читать сообщения — я это заметил и перезапустил канал.',
+    deadCount: (n) => 'Непрочитанных было: ' + n + '. Они не потеряны: очередь Telegram цела, и ответ придёт.',
+    deadRetry: 'Если через минуту тихо — напишите ещё раз.',
+    deadFailed: '🔴 Бот перестал читать сообщения, и перезапустить канал не получилось.',
+    deadFailedBody: (n) => 'В очереди Telegram непрочитанных: ' + n + '. Нужны руки.',
+  },
+  en: {
+    fiveHour: 'the five-hour window',
+    weekly: 'the weekly window',
+    limit: 'the limit',
+    resetTitle: '✅ Limits are back.',
+    resetBody: 'Claude Code is answering again — carry on.',
+    resetLate: '(late reminder: the watchdog had been restarted)',
+    hitTitle: '⛔ Subscription limit reached.',
+    hitBody: (w) => 'Claude Code did not process your message — it hit ' + w + '.',
+    hitWhen: (t, m) => 'Resets at ' + t + ' (in ' + m + ' min).',
+    hitPromise: 'I will tell you when the limits are back.',
+    deadFixed: '♻️ The bot stopped reading messages — I noticed and restarted the channel.',
+    deadCount: (n) => 'Unread at that moment: ' + n + '. Nothing is lost: the Telegram queue is intact and the answer will come.',
+    deadRetry: 'If it stays quiet for a minute, write again.',
+    deadFailed: '🔴 The bot stopped reading messages, and the channel could not be restarted.',
+    deadFailedBody: (n) => 'Unread in the Telegram queue: ' + n + '. This needs hands.',
+  },
+};
+
+/** Действующий словарь. Читается на каждом сообщении: правка файла применяется сразу. */
+function W() {
+  try {
+    const v = fs.readFileSync(LANG_FILE, 'utf8').trim().toLowerCase();
+    if (WORDS[v]) return WORDS[v];
+  } catch (e) { /* файла нет — законный исход */ }
+  return WORDS.ru;
+}
+
 // ---------- обязанность 1: лимит подписки ----------
 
 function windowName(t) {
-  if (t === 'five_hour') return 'пятичасовое окно';
-  if (t === 'weekly' || t === 'seven_day') return 'недельное окно';
-  return 'лимит' + (t ? ' (' + t + ')' : '');
+  const w = W();
+  if (t === 'five_hour') return w.fiveHour;
+  if (t === 'weekly' || t === 'seven_day') return w.weekly;
+  return w.limit + (t ? ' (' + t + ')' : '');
 }
 
 function armTimer(resetsAt) {
@@ -171,8 +234,9 @@ function fireReset(late) {
   timer = null;
   state.pendingResetsAt = null;
   saveState(state);
-  let text = '✅ Лимиты сброшены.\n\nClaude Code снова отвечает — можете продолжать.';
-  if (late) text += '\n\n(напоминание с опозданием: сторож был перезапущен)';
+  const w = W();
+  let text = w.resetTitle + '\n\n' + w.resetBody;
+  if (late) text += '\n\n' + w.resetLate;
   log('объявляю сброс' + (late ? ' с опозданием' : ''));
   send(text).then(() => { if (SELFTEST) { log('===SELFTEST_LIMIT_DONE==='); } });
 }
@@ -184,10 +248,11 @@ function onLimitHit(resetsAt, q) {
   const when = new Date(resetsAt * 1000);
   const mins = Math.max(0, Math.round((when.getTime() - Date.now()) / 60000));
   log('ЛИМИТ: ' + windowName(q.rateLimitType) + ', сброс ' + fmt(when));
-  send('⛔ Лимит подписки исчерпан.\n\n' +
-    'Claude Code не обработал ваше сообщение — упёрся в ' + windowName(q.rateLimitType) + '.\n' +
-    'Сброс: ' + fmt(when) + ' (через ' + mins + ' мин).\n\n' +
-    'Напомню, когда лимиты сбросятся.');
+  const w = W();
+  send(w.hitTitle + '\n\n' +
+    w.hitBody(windowName(q.rateLimitType)) + '\n' +
+    w.hitWhen(fmt(when), mins) + '\n\n' +
+    w.hitPromise);
   armTimer(resetsAt);
 }
 
@@ -296,17 +361,15 @@ function healthCheck() {
     log('ОПРАШИВАТЕЛЬ МЁРТВ — перезапускаю канал');
 
     restartChannel(err2 => {
+      const w = W();
       if (err2) {
         log('перезапуск не удался: ' + err2.message);
-        send('🔴 Бот перестал читать сообщения, и перезапустить канал не получилось.\n\n' +
-          'В очереди Telegram непрочитанных: ' + pending + '. Нужны руки.');
+        send(w.deadFailed + '\n\n' + w.deadFailedBody(pending));
         return;
       }
       // 🔒 СООБЩЕНИЯ НЕ ПОТЕРЯНЫ, И ЭТО СКАЗАНО ПРЯМО. Пока их никто не забрал,
       // они лежат в очереди Telegram; после перезапуска опрашиватель их прочтёт.
-      send('♻️ Бот перестал читать сообщения — я это заметил и перезапустил канал.\n\n' +
-        'Непрочитанных было: ' + pending + '. Они не потеряны: очередь Telegram цела, и ответ придёт.\n' +
-        'Если через минуту тихо — напишите ещё раз.');
+      send(w.deadFixed + '\n\n' + w.deadCount(pending) + '\n' + w.deadRetry);
     });
   });
 }

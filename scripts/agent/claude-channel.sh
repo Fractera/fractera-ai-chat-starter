@@ -43,15 +43,23 @@ export HOME=/root
 SESSION=fractera-agent
 MODEL_FILE=/opt/fractera/agent-model
 
-MODEL_ARG=""
+# 🔒 УМОЛЧАНИЕ — `haiku`, И ОНО ЖИВЁТ ЗДЕСЬ, А НЕ В ФАЙЛЕ НАСТРОЙКИ (130, решение
+# владельца 2026-09-05: «сделай по умолчанию модель haiku, чтобы на старте все
+# стартовали с этой модели»). Файл настройки можно удалить, перезаписать или
+# потерять при переносе; умолчание, живущее только в нём, — это умолчание, которое
+# однажды молча исчезнет. Здесь оно переживает всё, кроме правки этой строки.
+DEFAULT_MODEL=haiku
+
+MODEL="$DEFAULT_MODEL"
 if [ -s "$MODEL_FILE" ]; then
-  RAW=$(tr -d '\r\n' < "$MODEL_FILE" | tr -d '[:space:]')
+  RAW=$(tr -d '[:space:]' < "$MODEL_FILE")
   case "$RAW" in
-    *[!A-Za-z0-9._-]*) echo "модель отвергнута: недопустимые символы" >&2 ;;
+    *[!A-Za-z0-9._-]*) echo "модель отвергнута: недопустимые символы, беру $DEFAULT_MODEL" >&2 ;;
     "")                : ;;
-    *)                 MODEL_ARG=" --model $RAW" ;;
+    *)                 MODEL="$RAW" ;;
   esac
 fi
+MODEL_ARG=" --model $MODEL"
 
 # Наследие правки 119: сессия tmux, пережившая переезд, была бы вторым опрашивателем.
 tmux kill-session -t "$SESSION" 2>/dev/null

@@ -34,7 +34,7 @@ if [ -z "${T:-}" ]; then
   exit 1
 fi
 
-read -r -d '' CMDS <<'JSON'
+read -r -d '' CMDS_RU <<'JSON'
 [
   {"command":"start",  "description":"Приветствие и как привязать бота"},
   {"command":"help",   "description":"Что умеет этот бот"},
@@ -42,6 +42,17 @@ read -r -d '' CMDS <<'JSON'
   {"command":"tokens", "description":"Сколько токенов израсходовано в этой сессии"},
   {"command":"reset",  "description":"Сбросить контекст — начать сессию заново"},
   {"command":"model",  "description":"Показать или сменить модель (например: /model opus)"}
+]
+JSON
+
+read -r -d '' CMDS_EN <<'JSON'
+[
+  {"command":"start",  "description":"Welcome and how to pair the bot"},
+  {"command":"help",   "description":"What this bot can do"},
+  {"command":"status", "description":"Your pairing status"},
+  {"command":"tokens", "description":"Tokens spent in this session"},
+  {"command":"reset",  "description":"Clear the context and start a fresh session"},
+  {"command":"model",  "description":"Show or switch the model (e.g. /model opus)"}
 ]
 JSON
 
@@ -53,18 +64,29 @@ JSON
 # личной переписке действовал список плагина. `getMyCommands` без области
 # показывал наши шесть и выглядел доказательством — это была проверка не того,
 # что видит человек.
-# 🔒 ПРОВЕРЯТЬ НАДО ТУ ОБЛАСТЬ, В КОТОРОЙ ЧЕЛОВЕК СМОТРИТ, а не ту, в которую
-# писали.
+# 🔒 ПРОВЕРЯТЬ НАДО ТУ ОБЛАСТЬ, В КОТОРОЙ ЧЕЛОВЕК СМОТРИТ, а не ту, в которую писали.
 #
-# 🔒 СТАВИМ В ОБЕ: `all_private_chats` — та, что действует и которую занял
-# плагин; `default` — запасная, на случай если плагин однажды перестанет
-# занимать первую.
+# 🔒 ДВА ЯЗЫКА, И ЭТО ТОТ ЖЕ НАБОР, ЧТО У СТОРОЖА (130). Telegram сам выбирает
+# список по языку клиента: русскому телефону отдаст русский, любому другому —
+# английский. Русский ставится БЕЗ `language_code` (как список по умолчанию),
+# английский — с `language_code: en`.
+# 🛑 УМОЛЧАНИЕ — РУССКИЙ, а не английский: владелец русскоязычный, и телефон с
+# неведомой локалью должен показать ему понятное, а не «Welcome and how to pair».
 FAIL=0
-for SCOPE in '{"type":"all_private_chats"}' '{"type":"default"}'; do
-  OUT=$(curl -s -m 15 -X POST "https://api.telegram.org/bot$T/setMyCommands"     -H 'content-type: application/json'     -d "{\"commands\":$CMDS,\"scope\":$SCOPE}")
+put() { # $1=команды $2=область $3=язык (пусто = по умолчанию)
+  local BODY="{\"commands\":$1,\"scope\":$2"
+  [ -n "${3:-}" ] && BODY="$BODY,\"language_code\":\"$3\""
+  BODY="$BODY}"
+  local OUT
+  OUT=$(curl -s -m 15 -X POST "https://api.telegram.org/bot$T/setMyCommands"     -H 'content-type: application/json' -d "$BODY")
   case "$OUT" in
-    *'"ok":true'*) echo "меню обновлено в области $SCOPE" ;;
-    *)             echo "Telegram отказал ($SCOPE): $OUT" >&2; FAIL=1 ;;
+    *'"ok":true'*) echo "  меню: область $2 язык ${3:-по умолчанию} — готово" ;;
+    *)             echo "  Telegram отказал ($2/${3:-—}): $OUT" >&2; FAIL=1 ;;
   esac
+}
+
+for SCOPE in '{"type":"all_private_chats"}' '{"type":"default"}'; do
+  put "$CMDS_RU" "$SCOPE" ""
+  put "$CMDS_EN" "$SCOPE" "en"
 done
 exit $FAIL
