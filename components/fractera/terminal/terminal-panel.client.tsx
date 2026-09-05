@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowLeftIcon, BotIcon, KeyRoundIcon, RotateCcwIcon } from "lucide-react";
-import Link from "next/link";
+import { BotIcon, KeyRoundIcon, RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentSetupModal } from "@/components/fractera/terminal/agent-setup-modal.client";
 import { AuthFlowModal } from "@/components/fractera/terminal/auth-flow-modal.client";
@@ -323,11 +322,13 @@ export function TerminalPanel() {
   return (
     <div className="flex h-dvh w-full flex-col bg-[#0b0b0c]">
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-white/10 border-b px-3 py-2">
-        <Button asChild size="sm" variant="ghost">
-          <Link href="/">
-            <ArrowLeftIcon size={14} />В чат
-          </Link>
-        </Button>
+        {/* 🪦 КНОПКА «В ЧАТ» УБРАНА 2026-09-05 (124) ПРЯМЫМ СЛОВОМ ВЛАДЕЛЬЦА:
+            «наша задача убрать полностью ai sdk из этого проекта». Путь к ИИ
+            один — Telegram → Claude Code, и лента чата в нём не участвует;
+            кнопка вела туда, откуда решено уходить. Корень службы теперь сам
+            переадресует сюда, так что уводить отсюда больше некуда и незачем.
+            🛑 Служба `:3600` жива и нужна: терминал подписки, дверь канала
+            агента, медиатека, расшифровка голоса. Ушла дверь к ленте, не служба. */}
 
         {/* 🔒 ОДНА КНОПКА — РЕШЕНИЕ ВЛАДЕЛЬЦА (114-8). «Оболочка» и «Claude Code»
             убраны: вкладка существует ради одного — подключить подписку. Оболочка
