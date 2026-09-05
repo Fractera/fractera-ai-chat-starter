@@ -30,6 +30,7 @@ const https = require('https');
 const { URL } = require('url');
 
 const INTAKE_URL = process.env.INTAKE_URL || 'http://127.0.0.1:3000/api/intake';
+const REQUEST_URL = process.env.REQUEST_URL || 'http://127.0.0.1:3000/api/intake/request';
 const SECRET_FILE = process.env.INTAKE_SECRET_FILE || '/opt/fractera/app/.env.local';
 const SECRET_NAME = 'TELEGRAM_HOOK_SECRET';
 
@@ -54,12 +55,12 @@ function secret() {
   return '';
 }
 
-function postIntake(payload) {
+function postJson(url, payload) {
   return new Promise((resolve) => {
     const key = secret();
     if (!key) return resolve({ ok: false, error: 'no-secret', reason: 'TELEGRAM_HOOK_SECRET не найден в ' + SECRET_FILE });
 
-    const u = new URL(INTAKE_URL);
+    const u = new URL(url);
     const lib = u.protocol === 'https:' ? https : http;
     const body = JSON.stringify(payload);
     const req = lib.request({
@@ -131,7 +132,7 @@ async function runIntake(a) {
     payload.fileBase64 = bytes.toString('base64');
   }
 
-  const r = await postIntake(payload);
+  const r = await postJson(INTAKE_URL, payload);
   if (!r || r.ok !== true) {
     // 🔒 ОТКАЗ НАЗЫВАЕТСЯ ПРИЧИНОЙ. Агент прочитает это и скажет человеку, что
     // именно не сохранилось, вместо бодрого «готово».
@@ -139,6 +140,51 @@ async function runIntake(a) {
            (r && r.reason ? ' (' + String(r.reason).slice(0, 200) + ')' : '');
   }
   return String(r.forAgent || '(дверь не вернула текст)');
+}
+
+const TOOL_REQUEST = {
+  name: 'request_development',
+  description:
+    'Записать заявку на РАЗРАБОТКУ в приёмную проекта и получить её номер. ' +
+    'ВЫЗЫВАЙ ЭТО ВСЕГДА, когда человек просит что-то построить, изменить или починить в самом ' +
+    'приложении: страницу, кнопку, службу, отчёт. Разрабатывать тебе запрещено — ты записываешь ' +
+    'просьбу дословно и возвращаешь человеку имя файла, чтобы он запустил её через бота агента ' +
+    'разработки. Ничего при этом не строится и не начинается.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      text: { type: 'string', description: 'Дословные слова человека о том, что он хочет' },
+      who: { type: 'string', description: 'Имя пользователя из тега <channel user="...">' },
+    },
+    required: ['text'],
+  },
+};
+
+async function runRequest(a) {
+  const r = await postJson(REQUEST_URL, {
+    text: String(a.text || ''),
+    who: String(a.who || ''),
+    channel: 'Telegram',
+  });
+  if (!r || r.ok !== true) {
+    return 'Заявка НЕ записана: ' + String((r && (r.error || r.detail)) || 'нет ответа') +
+           '. Скажи человеку прямо, что просьба НЕ сохранена.';
+  }
+  // 🔒 ИМЯ ФАЙЛА — ГЛАВНОЕ В ОТВЕТЕ. Им человек называет заявку боту агента
+  // разработки; ответ без имени превращает «записал» в обещание без следа.
+  return [
+    'Заявка записана: ' + r.file,
+    'В очереди заявок: ' + (r.pending === undefined ? '?' : r.pending) + '.',
+    '',
+    'Скажи человеку ДОСЛОВНО это: просьба записана заявкой ' + r.file + ', и запустить её в',
+    'разработку можно через Telegram-бота агента разработки, назвав ему этот номер.',
+    'Сам ты ничего не строил и не начинал.',
+    // 🛑 ПЕРЕВОД СТРОКИ СОБИРАЕТСЯ КОДОМ, А НЕ ПИШЕТСЯ ESCAPE-ПОСЛЕДОВАТЕЛЬНОСТЬЮ.
+    // ✗ оплачено четырежды за день: этот файл правился скриптом через цепочку
+    // оболочек, и каждая съедала обратный слэш по-своему — в литерал попадал
+    // НАСТОЯЩИЙ перевод строки, и файл переставал разбираться. Тот же приём уже
+    // стоит в `envelope()` конвейера по той же причине.
+  ].join(String.fromCharCode(10));
 }
 
 // ---------- MCP по stdio: построчный JSON-RPC ----------
@@ -168,13 +214,16 @@ async function handle(m) {
       serverInfo: { name: 'intake-preloader', version: '1.0.0' },
     });
   }
-  if (m.method === 'tools/list') return ok(m.id, { tools: [TOOL] });
+  if (m.method === 'tools/list') return ok(m.id, { tools: [TOOL, TOOL_REQUEST] });
   if (m.method === 'tools/call') {
     const p = m.params || {};
-    if (p.name !== TOOL.name) return fail(m.id, 'unknown tool: ' + p.name);
+    if (p.name !== TOOL.name && p.name !== TOOL_REQUEST.name) {
+      return fail(m.id, 'unknown tool: ' + p.name);
+    }
     inFlight++;
     try {
-      const text = await runIntake(p.arguments || {});
+      const args = p.arguments || {};
+      const text = p.name === TOOL_REQUEST.name ? await runRequest(args) : await runIntake(args);
       ok(m.id, { content: [{ type: 'text', text }] });
     } catch (e) {
       ok(m.id, { content: [{ type: 'text', text: 'Приём упал: ' + String(e && e.message) }], isError: true });
