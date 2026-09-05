@@ -237,6 +237,83 @@ function restartChannel(cb) {
     (err) => cb(err || null));
 }
 
+// 🔒 ВТОРОЙ ПРИЗНАК СМЕРТИ: ОПРАШИВАТЕЛЬ ЖИВ КАК ПРОЦЕСС И НЕ ДЕРЖИТ СВЯЗИ.
+//
+// ✗ ИЗМЕРЕНО 2026-09-05: через шесть минут после перезапуска процесс `bun` жив, а
+// сокетов у него НЕТ НИ ОДНОГО — ни к Telegram, ни вообще. Двенадцать замеров за
+// 36 секунд дали ноль. Это не паузы между опросами: long-poll держал бы
+// соединение почти всегда.
+//
+// 🛑 СТОРОЖ-СИРОТА САМОГО ПЛАГИНА ЗДЕСЬ НИ ПРИ ЧЁМ, и это проверено чтением его
+// исходника: его `shutdown()` всегда доходит до `process.exit(0)` за две секунды.
+// Наш процесс жив — значит умер ЦИКЛ ОПРОСА, а не плагин.
+//
+// 🔒 ПОЧЕМУ ЭТОТ ПРИЗНАК ДОБАВЛЕН ВТОРЫМ, А НЕ ВМЕСТО ПЕРВОГО. Очередь Telegram
+// отвечает на вопрос «моё сообщение не читают» и молчит, пока владелец не пишет.
+// Этот — замечает смерть В ТИШИНЕ, до того как человек её обнаружит. Первый
+// точнее, второй быстрее; нужны оба.
+//
+// 🛑 ТРИ ПРОВЕРКИ ПОДРЯД, А НЕ ОДНА: короткий разрыв связи бывает и у здорового
+// клиента, и перезапуск на каждый чих хуже редкой паузы.
+// 🛑 И ТОЛЬКО ЕСЛИ ОПРАШИВАТЕЛЬ ВООБЩЕ ЕСТЬ: канал, остановленный владельцем
+// намеренно, поднимать против его воли нельзя.
+const DEAD_SOCKET_STRIKES = 3;
+
+function pollerAlive(cb) {
+  execFile('/usr/bin/pgrep', ['-fc', 'bun run --cwd'], (err, out) => {
+    cb(!err && Number(String(out).trim()) > 0);
+  });
+}
+
+function telegramLinks(cb) {
+  execFile('/usr/bin/ss', ['-tn'], { maxBuffer: 4 << 20 }, (err, out) => {
+    if (err) return cb(null); // прибор недоступен — молчим, а не выдумываем
+    const n = String(out).split('\n').filter(l => /149\.154|91\.108/.test(l)).length;
+    cb(n);
+  });
+}
+
+function socketCheck() {
+  pollerAlive(alive => {
+    if (!alive) {
+      // Канал остановлен — это законное состояние, счётчик сбрасываем.
+      if (state.idleStrikes) log('опрашивателя нет вовсе — канал остановлен, счётчик сброшен');
+      state.idleStrikes = 0; saveState(state);
+      return;
+    }
+    telegramLinks(n => {
+      if (n === null) return;
+      if (n > 0) {
+        if (state.idleStrikes) log('связь с Telegram есть — счётчик тишины сброшен');
+        state.idleStrikes = 0; saveState(state);
+        return;
+      }
+      state.idleStrikes = (state.idleStrikes || 0) + 1;
+      saveState(state);
+      log('опрашиватель жив, но связи с Telegram нет · подряд: ' + state.idleStrikes);
+      if (state.idleStrikes < DEAD_SOCKET_STRIKES) return;
+
+      const since = Date.now() - (state.lastRestartAt || 0);
+      if (since < RESTART_COOLDOWN_MS) {
+        log('перезапуск пропущен: прошло всего ' + Math.round(since / 60000) + ' мин из 15');
+        return;
+      }
+      state.idleStrikes = 0;
+      state.lastRestartAt = Date.now();
+      saveState(state);
+      log('ЦИКЛ ОПРОСА МЁРТВ В ТИШИНЕ — перезапускаю канал');
+      restartChannel(err2 => {
+        if (err2) {
+          log('перезапуск не удался: ' + err2.message);
+          send('🔴 Опрашиватель перестал держать связь с Telegram, и перезапустить канал не вышло. Нужны руки.');
+          return;
+        }
+        send('🔌 Опрашиватель молча перестал держать связь с Telegram — я заметил это в тишине и перезапустил канал заранее.\n\nВаши сообщения не терялись: перерыва в приёме не было.');
+      });
+    });
+  });
+}
+
 function healthCheck() {
   let token;
   try { token = readToken(); } catch (e) { return; }
@@ -294,7 +371,7 @@ if (SELFTEST) {
 
 state = loadState();
 if (!state) {
-  state = { offsets: {}, announcedResetsAt: null, pendingResetsAt: null, deadStrikes: 0, lastRestartAt: 0 };
+  state = { offsets: {}, announcedResetsAt: null, pendingResetsAt: null, deadStrikes: 0, idleStrikes: 0, lastRestartAt: 0 };
   // 🔒 ПЕРВЫЙ ЗАПУСК НЕ ПЕРЕИГРЫВАЕТ ПРОШЛОЕ: иначе сторож объявил бы вчерашний
   // лимит в первую же секунду.
   for (const f of listFiles()) state.offsets[f] = safeSize(f);
@@ -302,6 +379,7 @@ if (!state) {
   log('первый запуск: прошлое не переигрывается, файлов ' + Object.keys(state.offsets).length);
 }
 if (typeof state.deadStrikes !== 'number') state.deadStrikes = 0;
+if (typeof state.idleStrikes !== 'number') state.idleStrikes = 0;
 if (typeof state.lastRestartAt !== 'number') state.lastRestartAt = 0;
 
 if (state.pendingResetsAt) {
@@ -318,6 +396,8 @@ setInterval(scanOnce, POLL_MS);
 scanOnce();
 setInterval(healthCheck, HEALTH_MS);
 healthCheck();
+setInterval(socketCheck, HEALTH_MS);
+socketCheck();
 
 if (SELFTEST) {
   const secs = 45;
