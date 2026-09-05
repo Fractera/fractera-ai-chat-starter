@@ -163,12 +163,17 @@ async function handle(m) {
   if (m.method === 'tools/call') {
     const p = m.params || {};
     if (p.name !== TOOL.name) return fail(m.id, 'unknown tool: ' + p.name);
+    inFlight++;
     try {
       const text = await runIntake(p.arguments || {});
-      return ok(m.id, { content: [{ type: 'text', text }] });
+      ok(m.id, { content: [{ type: 'text', text }] });
     } catch (e) {
-      return ok(m.id, { content: [{ type: 'text', text: 'Приём упал: ' + String(e && e.message) }], isError: true });
+      ok(m.id, { content: [{ type: 'text', text: 'Приём упал: ' + String(e && e.message) }], isError: true });
+    } finally {
+      inFlight--;
+      maybeExit();
     }
+    return;
   }
   if (m.method === 'ping') return ok(m.id, {});
   return fail(m.id, 'method not found: ' + m.method);
@@ -190,5 +195,7 @@ process.stdin.on('data', chunk => {
     handle(m);
   }
 });
-// 🔒 ЗАКРЫЛСЯ ВХОД — ЗАКРЫЛСЯ СЕРВЕР. Агент ушёл, ждать больше некого.
-process.stdin.on('end', () => process.exit(0));
+// 🔒 ЗАКРЫЛСЯ ВХОД — ДОЖДАТЬСЯ НЕЗАВЕРШЁННОГО И ТОЛЬКО ПОТОМ ВЫЙТИ. Ждать нового
+// уже некого, но приём, начатый секунду назад, обязан дойти до конца: файл в
+// медиатеке без записи в хранилищах — половина работы, и худшая её половина.
+process.stdin.on('end', () => { stdinClosed = true; maybeExit(); });
