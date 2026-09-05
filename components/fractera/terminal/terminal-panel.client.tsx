@@ -319,6 +319,16 @@ export function TerminalPanel() {
     [send]
   );
 
+  // 🔒 ЦВЕТ КНОПОК ЗАДАН ЯВНО И НЕ ЗАВИСИТ ОТ ТЕМЫ — ПОТОМУ ЧТО ФОН ПОД НИМИ ТОЖЕ
+  // ОТ НЕЁ НЕ ЗАВИСИТ (128, 2026-09-05). Панель терминала всегда тёмная
+  // (`#0b0b0c`): это цвет оболочки, а не оформления страницы. Кнопки же были
+  // просто `variant="ghost"` и брали `text-foreground` из темы — то есть в одной
+  // из тем красились под светлый фон, которого здесь нет никогда, и пропадали.
+  // ✗ владелец: «в дневной теме они выглядят хорошо, а в ночной их не видно».
+  //
+  // 🔒 ПРАВИЛО ШИРЕ СЛУЧАЯ: элемент на фоне, не подчинённом теме, обязан иметь
+  // собственный цвет. Токен темы поверх фиксированного фона — это ставка на то,
+  // что тема угадает чужой фон, и половину времени ставка проигрывает.
   return (
     <div className="flex h-dvh w-full flex-col bg-[#0b0b0c]">
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-white/10 border-b px-3 py-2">
@@ -335,6 +345,7 @@ export function TerminalPanel() {
             под ней та же самая, и набрать в ней `claude` по-прежнему можно. */}
         <Button
           onClick={handleOpenSetup}
+          className="text-white/80 hover:bg-white/10 hover:text-white"
           size="sm"
           title="Подписка Claude Code и Telegram-бот"
           variant="ghost"
@@ -344,6 +355,7 @@ export function TerminalPanel() {
         </Button>
         <Button
           onClick={handleAttachAgent}
+          className="text-white/80 hover:bg-white/10 hover:text-white"
           size="sm"
           title="Показать живую сессию агента: тот же экран, что работает под pm2. Отключиться — Ctrl+A, затем D"
           variant="ghost"
@@ -354,7 +366,7 @@ export function TerminalPanel() {
 
 
         <Button
-          className="ml-auto"
+          className="ml-auto text-white/80 hover:bg-white/10 hover:text-white"
           onClick={handleReset}
           size="sm"
           title="Вернуть терминал в исходное состояние: мышь, экран, курсор"
