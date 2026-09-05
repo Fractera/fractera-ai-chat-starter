@@ -10,6 +10,7 @@ import {
   XtermTerminal,
 } from "@/components/fractera/terminal/xterm-terminal.client";
 import { Button } from "@/components/ui/button";
+import { createMouseFilter, MOUSE_OFF } from "@/lib/fractera/mouse-filter.mjs";
 import { extractAuthUrl } from "@/lib/fractera/terminal-auth.mjs";
 
 // ПАНЕЛЬ ТЕРМИНАЛА — ВЫЖИМКА ИЗ `coding-window-shell.client.tsx` (шаг 114-4).
@@ -87,6 +88,11 @@ export function TerminalPanel() {
   const modalOpenRef = useRef(false);
   const sizeRef = useRef({ cols: 80, rows: 24 });
 
+  // 🔒 ФИЛЬТР МЫШИ — СВОЙ НА КАЖДОЕ СОЕДИНЕНИЕ. У него есть память о
+  // незавершённой последовательности на границе куска; перенеси эту память в
+  // новую сессию — и первый её кусок склеился бы с хвостом предыдущей.
+  const mouseRef = useRef(createMouseFilter());
+
   const send = useCallback((payload: unknown) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -146,6 +152,12 @@ export function TerminalPanel() {
 
       ws.onopen = () => {
         setStatus("connected");
+        // 🔒 ФИЛЬТР РОЖДАЕТСЯ ЗАНОВО ВМЕСТЕ С СОЕДИНЕНИЕМ, а уже включённое
+        // слежение гасится строкой: фильтр не даёт включить мышь ВПЕРЁД, а
+        // `MOUSE_OFF` убирает то, что успело включиться раньше — например, в
+        // сессии агента, которая живёт на сервере с прошлой версии страницы.
+        mouseRef.current = createMouseFilter();
+        termRef.current?.write(MOUSE_OFF);
         ws.send(JSON.stringify({ mode: next, ticket, type: "init" }));
         ws.send(JSON.stringify({ type: "resize", ...sizeRef.current }));
         termRef.current?.focus();
@@ -156,7 +168,12 @@ export function TerminalPanel() {
           typeof event.data === "string"
             ? event.data
             : new TextDecoder().decode(event.data);
-        termRef.current?.write(chunk);
+        // 🔒 В ТЕРМИНАЛ — ОТФИЛЬТРОВАННОЕ, В БУФЕР РАСПОЗНАВАНИЯ — СЫРОЕ.
+        // Фильтр снимает только включение слежения за мышью, и ссылки входа он
+        // не трогает; но буфер существует ради поиска в СЫРЬЕ (закон в шапке
+        // файла), и кормить его чем-то обработанным значило бы завести вторую
+        // правду о том, что пришло из PTY.
+        termRef.current?.write(mouseRef.current(chunk));
         bufRef.current = (bufRef.current + chunk).slice(-BUFFER_LIMIT);
         if (timerRef.current) {
           clearTimeout(timerRef.current);
