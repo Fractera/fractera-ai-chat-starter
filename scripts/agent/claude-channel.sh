@@ -71,11 +71,25 @@ screen -S "$SESSION" -X quit 2>/dev/null
 # `screen -r` без имени откажется подключаться, пока их несколько.
 screen -wipe > /dev/null 2>&1
 
-cd /opt/fractera/agent-workspace || exit 1
+# 🔒 РАБОЧАЯ ПАПКА АГЕНТА — САМ РЕПОЗИТОРИЙ АВТОМАТИЗАЦИИ (135, 2026-09-05). Прежде
+# здесь стояла отдельная `/opt/fractera/agent-workspace`, и это было хуже по двум
+# причинам сразу. Первая: `CLAUDE.md`, `.mcp.json` и сам MCP-сервер лежали ТАМ,
+# положенные руками, — `bootstrap.sh` создавал папку пустой (`mkdir -p`), и на
+# чистом сервере агент рождался без инструкции и без инструментов. Теперь всё это
+# едет из git вместе с кодом, потому что лежит в его корне.
+# Вторая, решение владельца: агент, живущий в исходнике собственной автоматизации,
+# **читает себя** — на вопрос «почему ты так себя ведёшь» у него появляется точный
+# ответ вместо правдоподобного. Запрет остался на ПРАВКУ, а не на чтение.
+# 🛑 ЦЕНА НАЗВАНА: эта папка стирается `rm -rf` при каждой установке. Поэтому ниже
+# открыта `/opt/fractera/agent-notes` — единственное, что переживает развёртывание.
+AGENT_HOME=/opt/fractera/telegrambot
+AGENT_NOTES=/opt/fractera/agent-notes
+mkdir -p "$AGENT_NOTES"
+cd "$AGENT_HOME" || exit 1
 # 🔒 МЕНЮ БОТА СТАВИТСЯ ПОСЛЕ ПЛАГИНА, А НЕ ДО (126). Плагин объявляет своё меню
 # при старте канала; наш вызов обязан прийти следом, иначе его затрут. Отвязанный
 # фоновый процесс — потому что ниже `exec`, и эта строка иначе не выполнится.
-setsid nohup bash -c 'sleep 25; /opt/fractera/agent-commands.sh' > /dev/null 2>&1 < /dev/null &
+setsid nohup bash -c "sleep 25; $AGENT_HOME/scripts/agent/agent-commands.sh" > /dev/null 2>&1 < /dev/null &
 
 # 🔒 РЕЖИМ РАЗРЕШЕНИЙ `auto` — ПРЯМОЕ РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-05: «as default to
 # do режиме auto mode for all starts… after reset, after change model, restart —
@@ -96,4 +110,4 @@ setsid nohup bash -c 'sleep 25; /opt/fractera/agent-commands.sh' > /dev/null 2>&
 # 🔒 ГРАНИЦЫ ОСТАЮТСЯ ПОВЕДЕНЧЕСКИМИ, И ЭТО СКАЗАНО ПРЯМО: агент не правит код
 # служб потому, что так велит его `CLAUDE.md` (шаг 126), а не потому, что не
 # может. Режим убрал вопросы, а не запреты. Владелец знает и решил так.
-exec screen -DmS "$SESSION" claude --channels plugin:telegram@claude-plugins-official --add-dir /root/.claude/channels/telegram --permission-mode auto $MODEL_ARG
+exec screen -DmS "$SESSION" claude --channels plugin:telegram@claude-plugins-official --add-dir /root/.claude/channels/telegram --add-dir "$AGENT_NOTES" --permission-mode auto $MODEL_ARG

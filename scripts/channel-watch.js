@@ -39,7 +39,7 @@ const SELFTEST = process.argv.includes('--selftest');
 
 const WATCH_DIR = SELFTEST
   ? '/tmp/channel-watch-selftest'
-  : '/root/.claude/projects/-opt-fractera-agent-workspace';
+  : '/root/.claude/projects/-opt-fractera-telegrambot';
 const STATE_FILE = SELFTEST
   ? '/tmp/channel-watch-selftest/state.json'
   : '/opt/fractera/channel-watch-state.json';

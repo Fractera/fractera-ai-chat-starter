@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "intake": {
+      "command": "node",
+      "args": ["scripts/agent/intake-preloader.js"]
+    }
+  }
+}

@@ -4,7 +4,7 @@
 # 🔒 ЧИТАЕТ ЖУРНАЛ СЕССИИ, КОТОРЫЙ CLAUDE CODE ВЕДЁТ САМ, а не считает сам.
 # Второй счётчик рядом с настоящим разошёлся бы с ним молча.
 set -u
-D=/root/.claude/projects/-opt-fractera-agent-workspace
+D=/root/.claude/projects/-opt-fractera-telegrambot
 F=$(ls -t "$D"/*.jsonl 2>/dev/null | head -1)
 [ -n "${F:-}" ] || { echo "Журнала сессии ещё нет — агент не отвечал ни разу."; exit 0; }
 python3 - "$F" <<'PY'

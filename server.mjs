@@ -133,7 +133,7 @@ function shellPath() {
 }
 
 function workspaceDir() {
-  const named = process.env.AGENT_WORKSPACE || "/opt/fractera/agent-workspace";
+  const named = process.env.AGENT_WORKSPACE || "/opt/fractera/telegrambot";
   return existsSync(named) ? named : process.cwd();
 }
 
