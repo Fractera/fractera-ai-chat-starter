@@ -76,6 +76,9 @@ export function TerminalPanel() {
   const [note, setNote] = useState("");
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  // Какой режим идёт сейчас: команду привязки принимает ТОЛЬКО сессия с
+  // каналом. Отправленная в оболочку, она была бы просто ненайденной командой.
+  const [mode, setMode] = useState<Mode>("claude-check");
 
   const termRef = useRef<XtermHandle>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -226,13 +229,27 @@ export function TerminalPanel() {
   // там появляется либо ссылка входа, либо код привязки, и окно их закрыло бы.
   const handleLogin = useCallback(() => {
     setSetupOpen(false);
+    setMode("claude-login");
     connect("claude-login");
   }, [connect]);
 
   const handleLaunchChannel = useCallback(() => {
     setSetupOpen(false);
+    setMode("claude-channel");
     connect("claude-channel");
   }, [connect]);
+
+  // 🔒 КОМАНДА ПРИВЯЗКИ УХОДИТ В ТЕРМИНАЛ, А НЕ В ДВЕРЬ, И ЭТО НЕ ЛЕНЬ.
+  // Привязку выполняет САМА сессия Claude Code: это её слэш-команда, и
+  // состояние ожидания живёт у неё в памяти. Дверь, дописавшая `access.json`
+  // в обход, разошлась бы с тем, что помнит плагин, — и разошлась бы молча.
+  const handlePair = useCallback(
+    (code: string) => {
+      send({ data: `/telegram:access pair ${code}\n`, type: "stdin" });
+      termRef.current?.focus();
+    },
+    [send]
+  );
 
   // 🔒 РУЧНОЙ СБРОС — НЕ ЛИШНЯЯ КНОПКА, А ПРИЗНАНИЕ ГРАНИЦЫ. Два слоя выше
   // лечат случаи, которые мы УМЕЕМ заметить: смену режима и обрыв сокета.
@@ -316,9 +333,11 @@ export function TerminalPanel() {
 
       {setupOpen ? (
         <AgentSetupModal
+          channelRunning={mode === "claude-channel"}
           onClose={handleCloseSetup}
           onLaunchChannel={handleLaunchChannel}
           onLogin={handleLogin}
+          onPair={handlePair}
         />
       ) : null}
 

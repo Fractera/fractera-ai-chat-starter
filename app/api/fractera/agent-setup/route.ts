@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   claudeAuthState,
   maskToken,
+  readTelegramAccess,
   readTelegramToken,
   TELEGRAM_TOKEN_RE,
   writeTelegramToken,
@@ -30,9 +31,18 @@ import { fracteraRoles } from "@/lib/fractera/session";
 function payload() {
   const auth = claudeAuthState();
   const token = readTelegramToken();
+  const access = readTelegramAccess();
   return {
     subscription: { loggedIn: auth.loggedIn, method: auth.method },
-    telegram: { masked: maskToken(token), present: Boolean(token) },
+    telegram: {
+      // Сколько собеседников уже привязано и какие коды ждут привязки. Окно
+      // опрашивает эту дверь, пока открыто, — поэтому код, пришедший человеку
+      // в Telegram, появляется у него на экране САМ, без переписывания.
+      allowed: access.allowed,
+      masked: maskToken(token),
+      pending: access.pending,
+      present: Boolean(token),
+    },
   };
 }
 
