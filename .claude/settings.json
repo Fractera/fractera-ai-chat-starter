@@ -2,8 +2,8 @@
   "enabledMcpjsonServers": ["intake"],
   "permissions": {
     "allow": [
-      "reply",
-      "download_attachment",
+      "mcp__plugin_telegram_telegram__reply",
+      "mcp__plugin_telegram_telegram__download_attachment",
       "mcp__intake__intake",
       "mcp__intake__request_development"
     ]
