@@ -76,6 +76,26 @@ command -v claude > /dev/null 2>&1 || say "ВНИМАНИЕ: claude не уст�
 # 🛑 ОПРАШИВАТЕЛЬ TELEGRAM ОБЯЗАН БЫТЬ РОВНО ОДИН: Telegram отдаёт каждое
 # обновление одному читателю, второй поделит переписку владельца пополам МОЛЧА.
 # Отсюда `pm2 delete` перед стартом, а не `pm2 restart` «на всякий случай».
+# 🛑 ДОВЕРИЕ ПАПКЕ СТАВИТСЯ ДО СТАРТА, ИНАЧЕ АГЕНТ ВСТАЁТ НА МОДАЛЬНОМ ВОПРОСЕ.
+# ✗ ОПЛАЧЕНО ЖИВЬЁМ 2026-09-05 ПРИ ПЕРВОМ ЖЕ ЗАПУСКЕ ЭТОГО ФАЙЛА: Claude Code
+# спросил «Is this a project you trust? This folder pre-approves 4 tool
+# permissions in .claude/settings.json» — и остался ждать нажатия. `pm2 list`
+# показывал `online`, экран висел на вопросе, опрашиватель Telegram = 0, бот
+# молчал. Нажать было некому: терминала у процесса под pm2 нет.
+# 🔒 ЗАКОН ПРОЕКТА ПОДТВЕРЖДЁН ЧЕТВЁРТЫЙ РАЗ ЗА СУТКИ: КАЖДАЯ НОВАЯ СПОСОБНОСТЬ
+# АГЕНТА ПРИНОСИТ СВОЙ МОДАЛЬНЫЙ ВОПРОС, и закрывать его надо настройкой в той же
+# правке. Здесь способность — собственный `.claude/settings.json`: именно он и
+# вызвал вопрос, которого у пустой рабочей папки не было.
+say "доверие рабочей папке"
+python3 - <<'PYEOF' || say "ВНИМАНИЕ: доверие не проставлено — агент встанет на вопросе"
+import json, os
+p = "/root/.claude.json"
+c = json.load(open(p)) if os.path.exists(p) else {}
+c.setdefault("projects", {}).setdefault("/opt/fractera/telegrambot", {})["hasTrustDialogAccepted"] = True
+json.dump(c, open(p, "w"), indent=2, ensure_ascii=False)
+print("[telegrambot] + hasTrustDialogAccepted")
+PYEOF
+
 say "процесс fractera-agent-channel"
 chmod +x scripts/agent/*.sh scripts/install.sh 2>/dev/null
 pm2 delete fractera-agent-channel > /dev/null 2>&1
