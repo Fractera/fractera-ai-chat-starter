@@ -34,21 +34,37 @@ if [ -z "${T:-}" ]; then
   exit 1
 fi
 
-read -r -d '' BODY <<'JSON'
-{"commands":[
+read -r -d '' CMDS <<'JSON'
+[
   {"command":"start",  "description":"Приветствие и как привязать бота"},
   {"command":"help",   "description":"Что умеет этот бот"},
   {"command":"status", "description":"Состояние привязки"},
   {"command":"tokens", "description":"Сколько токенов израсходовано в этой сессии"},
   {"command":"reset",  "description":"Сбросить контекст — начать сессию заново"},
   {"command":"model",  "description":"Показать или сменить модель (например: /model opus)"}
-]}
+]
 JSON
 
-OUT=$(curl -s -m 15 -X POST "https://api.telegram.org/bot$T/setMyCommands" \
-  -H 'content-type: application/json' -d "$BODY")
-
-case "$OUT" in
-  *'"ok":true'*) echo "меню бота обновлено: 6 команд" ;;
-  *)             echo "Telegram отказал: $OUT" >&2; exit 1 ;;
-esac
+# 🔒 ОБЛАСТЬ ВИДИМОСТИ ОБЯЗАТЕЛЬНА, И ЭТО ГЛАВНОЕ ЗДЕСЬ.
+#
+# ✗ ОПЛАЧЕНО ЖИВЬЁМ 2026-09-05: владелец открыл меню и увидел прежние три
+# команды. Меню было поставлено — но в область `default`, а плагин ставит свои
+# три в `all_private_chats`. У Telegram УЗКАЯ ОБЛАСТЬ ПЕРЕКРЫВАЕТ ШИРОКУЮ, и в
+# личной переписке действовал список плагина. `getMyCommands` без области
+# показывал наши шесть и выглядел доказательством — это была проверка не того,
+# что видит человек.
+# 🔒 ПРОВЕРЯТЬ НАДО ТУ ОБЛАСТЬ, В КОТОРОЙ ЧЕЛОВЕК СМОТРИТ, а не ту, в которую
+# писали.
+#
+# 🔒 СТАВИМ В ОБЕ: `all_private_chats` — та, что действует и которую занял
+# плагин; `default` — запасная, на случай если плагин однажды перестанет
+# занимать первую.
+FAIL=0
+for SCOPE in '{"type":"all_private_chats"}' '{"type":"default"}'; do
+  OUT=$(curl -s -m 15 -X POST "https://api.telegram.org/bot$T/setMyCommands"     -H 'content-type: application/json'     -d "{\"commands\":$CMDS,\"scope\":$SCOPE}")
+  case "$OUT" in
+    *'"ok":true'*) echo "меню обновлено в области $SCOPE" ;;
+    *)             echo "Telegram отказал ($SCOPE): $OUT" >&2; FAIL=1 ;;
+  esac
+done
+exit $FAIL
