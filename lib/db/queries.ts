@@ -14,8 +14,6 @@ import {
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import type { ArtifactKind } from "@/components/chat/artifact";
-import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { ChatbotError } from "../errors";
 import { generateUUID } from "../utils";
 import {
@@ -32,6 +30,18 @@ import {
   vote,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
+
+// 🔒 ДВА ТИПА ЖИВУТ ЗДЕСЬ, А НЕ В УДАЛЁННОМ ИНТЕРФЕЙСЕ (шаг 134). Раньше они
+// приходили из `components/chat/artifact` и `components/chat/visibility-selector`
+// — то есть слой базы зависел от разметки. Чат-интерфейс вендора снесён, а
+// колонки `Document.kind` и `Chat.visibility` в схеме остались; поэтому типы
+// перенесены к тем запросам, которые ими пользуются.
+//
+// 🛑 ЗНАЧЕНИЯ ПОВТОРЕНЫ ДОСЛОВНО, А НЕ СУЖЕНЫ: в базе уже лежат строки всех
+// четырёх видов, и сузить набор здесь значило бы объявить часть данных
+// несуществующей.
+type ArtifactKind = "text" | "code" | "image" | "sheet";
+type VisibilityType = "private" | "public";
 
 const client = postgres(process.env.POSTGRES_URL ?? "");
 const db = drizzle(client);
